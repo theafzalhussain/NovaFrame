@@ -25,14 +25,14 @@ app.use(express.json({ limit: "1mb" }));
 /* ------------------------------------------------------------------ */
 /* Auth Middleware & Helpers                                          */
 /* ------------------------------------------------------------------ */
-export interface AuthenticatedRequest extends Request {
+type AuthenticatedRequest = Request & {
   adminUser?: {
     id: number;
     email: string;
     full_name: string;
     role: string;
   };
-}
+};
 
 function requireAdminAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
