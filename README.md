@@ -5,32 +5,57 @@ A production-grade studio website: React + TypeScript frontend, a real **Express
 
 ---
 
-## 1. Language & stack map
-
-This matches the planned structure exactly:
-
-| Layer | Languages / tools | Where in this repo |
-|---|---|---|
-| **Frontend markup** | HTML5 | `index.html`, semantic JSX in `src/pages/*` |
-| **Frontend styling** | CSS3 + Tailwind CSS | `src/index.css` (design tokens, keyframes, utilities) |
-| **Frontend logic** | JavaScript / **TypeScript** | everything under `src/`, strict mode |
-| **Frontend UI** | React 19 | `src/App.tsx`, `src/pages/*`, `src/components/*` |
-| **3D / WebGL** | **Three.js** | `src/components/HeroCanvas.tsx` (real WebGL scene) |
-| **Backend runtime** | **Node.js + Express** | `server/index.ts` |
-| **Backend (alt)** | **PHP 8 + PDO** | `server/php/api.php` |
-| **Database** | **SQL** — SQLite & MySQL | `server/db.ts`, `server/php/schema.sql` |
+## 1. Tech stack (Languages & Tools)
 
 ### Frontend
-HTML5 semantic structure → Tailwind CSS design system → vanilla JS interactions →
-React components in TypeScript → Three.js for the WebGL hero.
+
+| Language / tool | How it is used |
+|---|---|
+| **HTML5** | `index.html` and semantic JSX markup |
+| **CSS3 + Tailwind CSS v4** | Design tokens, animations, and responsive utilities in `src/index.css` |
+| **JavaScript (Vanilla)** | Form logic, navigation, counters, and `IntersectionObserver` interactions |
+| **TypeScript** | Strict-mode application logic and type-safe React components |
+| **React 19** | Components, hooks, and the single-page application |
+| **Three.js** | Real-time WebGL 3D hero scene in `src/components/HeroCanvas.tsx` |
 
 ### Backend
-Node.js + Express REST API. Input validation middleware, admin token guard,
-prepared statements, central error handler.
+
+| Language / tool | How it is used |
+|---|---|
+| **Node.js + Express** | REST API server in `server/index.ts` |
+| **PHP 8 + PDO** | MySQL API alternative for shared hosting in `server/php/api.php` |
+| **Token-based admin authentication** | Session tokens, protected admin routes, and role-based access |
+| **Node.js `crypto` / PBKDF2** | Password hashing with SHA-512 and 100,000 iterations |
 
 ### Database
-SQL schema with normalised tables, indexes, a `CHECK` constraint on pipeline status,
-and a reporting view. SQLite locally; MySQL in production (`schema.sql`).
+
+| Database / language | How it is used |
+|---|---|
+| **SQLite (`better-sqlite3`)** | Main local database in `server/db.ts` |
+| **MySQL** | Production/shared-hosting database |
+| **SQL** | Normalized tables, indexes, prepared statements, constraints, and reporting queries |
+
+### Deployment / hosting
+
+- **Frontend:** Vite development server and single-file production build (`dist/index.html`)
+- **Backend:** Node.js + Express or PHP 8 + MySQL
+- **Database:** SQLite for local development or MySQL for production
+
+### Project structure
+
+```text
+.
+├── public/              # Static assets and branding
+├── server/              # Node.js API, SQLite database, and PHP/MySQL alternative
+├── src/
+│   ├── components/      # Reusable UI and admin components
+│   ├── data/            # Site content, services, projects, and legal copy
+│   ├── lib/             # API client and routing helpers
+│   └── pages/           # Application pages and route views
+├── index.html           # HTML entry point
+├── package.json         # Scripts and dependencies
+└── vite.config.ts       # Vite and single-file build configuration
+```
 
 ---
 
