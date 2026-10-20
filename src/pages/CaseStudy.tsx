@@ -1,362 +1,230 @@
-import { useEffect, useState } from "react";
-import { Link } from "../lib/router";
-import { projects, type Project } from "../data/content";
-import ProjectVisual from "../components/ProjectVisual";
+import { useState } from "react";
 import { Icon } from "../components/Icons";
-import {
-  GhostButton,
-  Glow,
-  PrimaryButton,
-  Reveal,
-} from "../components/ui";
-import { cn } from "../utils/cn";
+import ProjectVisual from "../components/ProjectVisual";
+import { ProjectLinks, StatusPill } from "../components/ProjectCard";
+import { TechLogo } from "../components/TechLogo";
+import { Button, Reveal } from "../components/ui";
+import type { Project } from "../data/types";
+import { useContent } from "../lib/content";
+import { Link } from "../lib/router";
+import { hostOf } from "../lib/site";
 
-/**
- * Cinematic Case Study Page
- * -------------------------
- * Full-bleed visual hero with parallax, animated scroll progress bar,
- * gradient metric counters, sticky sidebar with tech stack, and
- * premium prev/next navigation.
- */
+/** Full-page screenshot the visitor can scroll inside a browser frame. */
+function ScreenshotViewer({ project }: { project: Project }) {
+  const [tall, setTall] = useState(false);
+  if (!project.cover || project.visual === "terminal") {
+    return (
+      <div className="h-[380px] overflow-hidden rounded-[22px] border border-gold-300/12 md:h-[440px]">
+        <ProjectVisual project={project} />
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-[22px] border border-gold-300/12 bg-ink-900 shadow-[0_60px_120px_-60px_rgba(195,149,74,0.45)]">
+      <div className="flex items-center gap-3 border-b border-gold-300/10 px-4 py-3">
+        <div className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-gold-300/30" />
+          <span className="h-2.5 w-2.5 rounded-full bg-gold-300/20" />
+          <span className="h-2.5 w-2.5 rounded-full bg-gold-300/10" />
+        </div>
+        <span className="mx-auto truncate rounded-full border border-gold-300/10 bg-ink-950/80 px-4 py-1 font-mono text-[11px] text-mist">
+          {hostOf(project.liveUrl) || project.title}
+        </span>
+        {tall ? <span className="label hidden text-[9.5px] sm:block">Scroll inside ↓</span> : <span className="w-16" />}
+      </div>
+      <div className={tall ? "max-h-[78vh] overflow-y-auto" : ""} tabIndex={tall ? 0 : undefined} aria-label={`${project.title} full-page screenshot`}>
+        <img
+          src={project.cover}
+          alt={`${project.title} full-page screenshot`}
+          className="block w-full"
+          onLoad={(e) => setTall(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth > 0.9)}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function CaseStudyPage({ project }: { project: Project }) {
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      setProgress(max > 0 ? Math.min(window.scrollY / max, 1) : 0);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const related = projects.filter((p) => p.id !== project.id).slice(0, 3);
-  const index = projects.findIndex((p) => p.id === project.id);
-  const prev = projects[(index - 1 + projects.length) % projects.length];
-  const next = projects[(index + 1) % projects.length];
+  const { collections } = useContent();
+  const all = collections.projects;
+  const idx = all.findIndex((p) => p.id === project.id);
+  const prev = idx > 0 ? all[idx - 1] : all[all.length - 1];
+  const next = idx < all.length - 1 ? all[idx + 1] : all[0];
+  const studio = project.kind === "studio";
+  const techIcons = new Map(collections.techStack.flatMap((g) => g.items.map((i) => [i.name.toLowerCase(), i.icon] as const)));
 
   return (
     <>
-      {/* Scroll progress bar */}
-      <div
-        className="case-progress"
-        style={{ transform: `scaleX(${progress})` }}
-        aria-hidden
-      />
-
-      {/* ================= CINEMATIC HERO ================= */}
-      <section className="cinematic-hero relative overflow-hidden pt-32 pb-14 md:pt-44 md:pb-20">
-        <div className="grid-bg absolute inset-0 opacity-60" aria-hidden />
-        <Glow className="-top-32 left-1/2 h-[420px] w-[620px] -translate-x-1/2" color="rgba(79,70,229,0.3)" />
-        <Glow className="top-1/3 -right-24 h-80 w-80" color="rgba(6,182,212,0.2)" />
-
+      <section className="relative overflow-hidden pt-40 pb-14 md:pt-48">
+        <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
         <div className="shell relative">
-          {/* Breadcrumb */}
-          <Link
-            to="/portfolio"
-            className="group inline-flex items-center gap-2 text-[13px] font-medium text-slate-400 transition hover:text-white"
-          >
-            <span
-              aria-hidden
-              className="transition-transform duration-300 group-hover:-translate-x-1"
-            >
-              ←
-            </span>
-            All case studies
-          </Link>
-
-          {/* Badges */}
-          <div className="mt-7 flex flex-wrap gap-2.5">
-            <span className="rounded-full border border-brand-400/40 bg-brand-500/15 px-3.5 py-1.5 font-mono text-[10px] font-semibold tracking-[0.16em] text-brand-200 uppercase backdrop-blur-md">
-              {project.category}
-            </span>
-            <span className="rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-300 uppercase backdrop-blur-md">
-              {project.client}
-            </span>
-            <span className="rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 font-mono text-[10px] tracking-[0.16em] text-slate-300 uppercase backdrop-blur-md">
-              {project.year}
-            </span>
-          </div>
-
-          {/* Title */}
           <Reveal>
-            <h1 className="font-display mt-6 max-w-4xl text-[2.4rem] leading-[1.05] font-extrabold tracking-[-0.035em] text-white sm:text-5xl md:text-[3.8rem]">
-              {project.title}
-            </h1>
+            <Link to="/work" className="inline-flex items-center gap-2 text-[13px] font-semibold text-mist transition hover:text-gold-200">
+              <Icon name="arrow-left" className="h-3.5 w-3.5" /> All work
+            </Link>
           </Reveal>
-
-          {/* Summary */}
-          <Reveal delay={100}>
-            <p className="mt-6 max-w-2xl text-[16px] leading-relaxed text-slate-300 md:text-[18px]">
-              {project.summary}
-            </p>
-          </Reveal>
-
-          {/* CTA row */}
-          <Reveal delay={180}>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <PrimaryButton to="/contact">Build something similar</PrimaryButton>
-              <GhostButton to="/portfolio">Browse all work</GhostButton>
+          <div className="mt-10 grid items-end gap-10 lg:grid-cols-[1.25fr_0.75fr]">
+            <div>
+              <Reveal delay={60}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <StatusPill status={project.status} />
+                  <span className="label">
+                    {project.category} · {project.year} · {project.client}
+                  </span>
+                </div>
+              </Reveal>
+              <Reveal delay={120}>
+                <h1 className="display mt-7 text-[3.2rem] leading-[0.95] sm:text-7xl md:text-[6rem]">{project.title}</h1>
+                <p className="serif-accent text-gold mt-4 text-[1.6rem] md:text-[2.1rem]">{project.subtitle}</p>
+              </Reveal>
+              <Reveal delay={180}>
+                <p className="mt-7 max-w-2xl text-[16.5px] leading-relaxed text-sand md:text-[18px]">{project.summary}</p>
+              </Reveal>
             </div>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ================= FULL-BLEED VISUAL ================= */}
-      <section className="relative -mt-4 pb-14">
-        <div className="shell">
-          <Reveal>
-            <div className={cn(
-              "premium-card relative overflow-hidden rounded-[32px] border border-white/15 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]",
-            )}>
-              {/* Accent header band */}
-              <div className={cn("h-2 w-full bg-gradient-to-r", project.accent)} />
-              <div className="aspect-[16/8] w-full bg-[#0a0d1a]">
-                <ProjectVisual project={project} />
+            <Reveal delay={220}>
+              <div className="lux-card p-6">
+                <p className="label">Role</p>
+                <p className="mt-2 text-[14.5px] leading-relaxed text-parchment">{project.role}</p>
+                <div className="hairline my-5" />
+                <ProjectLinks project={project} />
               </div>
-            </div>
-          </Reveal>
+            </Reveal>
+          </div>
         </div>
       </section>
 
-      {/* ================= METRICS ================= */}
       <section className="pb-16">
-        <div className="shell grid gap-4 sm:grid-cols-3">
-          {project.metrics.map((m, i) => (
-            <Reveal key={m.label} delay={i * 90}>
-              <div className="premium-card glass-card rounded-3xl p-7 text-center">
-                <div className="metric-value font-display text-4xl font-extrabold tracking-tight md:text-5xl">
-                  {m.value}
-                </div>
-                <div className="mt-2 font-mono text-[11px] tracking-[0.16em] text-slate-400 uppercase">
-                  {m.label}
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      <div className="divider-glow" />
-
-      {/* ================= NARRATIVE ================= */}
-      <section className="py-16 md:py-20">
-        <div className="shell">
-          {/* Problem / Solution */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Reveal>
-              <div className="group h-full rounded-3xl border border-rose-400/25 bg-gradient-to-br from-rose-500/[0.08] to-transparent p-7 transition hover:border-rose-400/45">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-rose-500/20 text-rose-300">
-                    <Icon name="target" className="h-4 w-4" />
-                  </span>
-                  <p className="font-mono text-[11px] font-semibold tracking-[0.2em] text-rose-300 uppercase">
-                    The problem
-                  </p>
-                </div>
-                <p className="mt-5 text-[15.5px] leading-relaxed text-slate-200">{project.problem}</p>
-              </div>
-            </Reveal>
-            <Reveal delay={120}>
-              <div className="group h-full rounded-3xl border border-emerald-400/25 bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-7 transition hover:border-emerald-400/45">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-500/20 text-emerald-300">
-                    <Icon name="bolt" className="h-4 w-4" />
-                  </span>
-                  <p className="font-mono text-[11px] font-semibold tracking-[0.2em] text-emerald-300 uppercase">
-                    Our solution
-                  </p>
-                </div>
-                <p className="mt-5 text-[15.5px] leading-relaxed text-slate-200">{project.solution}</p>
-              </div>
-            </Reveal>
-          </div>
-
-          {/* Features / Challenges + Sidebar */}
-          <div className="mt-14 grid gap-10 lg:grid-cols-[1.15fr_0.85fr]">
-            {/* Left column */}
-            <div className="space-y-10">
-              {/* Features */}
-              <Reveal>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-aqua-400" />
-                    <h2 className="font-display text-sm font-bold tracking-[0.18em] text-brand-300 uppercase">
-                      Key features delivered
-                    </h2>
-                  </div>
-                  <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-                    {project.features.map((f, i) => (
-                      <li
-                        key={f}
-                        className="premium-card group flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:bg-white/[0.06]"
-                        style={{ transitionDelay: `${i * 30}ms` }}
-                      >
-                        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-aqua-500 text-[11px] font-bold text-white">
-                          {i + 1}
-                        </span>
-                        <span className="text-[14px] leading-relaxed text-slate-300">{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Reveal>
-
-              {/* Challenges */}
-              <Reveal delay={100}>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-violet-400" />
-                    <h2 className="font-display text-sm font-bold tracking-[0.18em] text-brand-300 uppercase">
-                      Challenges solved
-                    </h2>
-                  </div>
-                  <ul className="mt-6 space-y-3">
-                    {project.challenges.map((c, i) => (
-                      <li
-                        key={c}
-                        className="glass-card group flex items-start gap-4 rounded-2xl border border-white/10 p-5 transition hover:border-violet-400/40"
-                      >
-                        <span className="font-display grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white shadow-lg">
-                          {i + 1}
-                        </span>
-                        <p className="text-[14.5px] leading-relaxed text-slate-300">{c}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </Reveal>
-            </div>
-
-            {/* Right sticky sidebar */}
-            <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
-              <Reveal delay={140}>
-                <div className="glass-card rounded-3xl border border-white/10 p-6">
-                  <p className="font-mono text-[10px] tracking-[0.2em] text-slate-500 uppercase">
-                    Tech stack
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {project.stack.map((t) => (
-                      <span
-                        key={t}
-                        className="tech-tag rounded-lg border border-brand-400/30 bg-brand-500/10 px-3 py-1.5 font-mono text-[11px] text-brand-200"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </Reveal>
-
-              <Reveal delay={200}>
-                <div className="glass-card rounded-3xl border border-white/10 p-6">
-                  <p className="font-mono text-[10px] tracking-[0.2em] text-slate-500 uppercase">
-                    Our role
-                  </p>
-                  <p className="mt-3 text-[14.5px] leading-relaxed text-slate-300">{project.role}</p>
-                </div>
-              </Reveal>
-
-              <Reveal delay={260}>
-                <div className="premium-card rounded-3xl border border-brand-400/30 bg-gradient-to-br from-brand-600/30 via-ink-850 to-aqua-500/15 p-6">
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-aqua-500 text-white">
-                    <Icon name="sparkle" className="h-5 w-5" />
-                  </span>
-                  <p className="font-display mt-4 text-[16px] font-bold text-white">
-                    Want a similar outcome?
-                  </p>
-                  <p className="mt-2 text-[13.5px] leading-relaxed text-slate-300">
-                    We will review your context and tell you honestly what is achievable and in what
-                    timeframe.
-                  </p>
-                  <PrimaryButton to="/contact" className="mt-5 w-full">
-                    Start a project
-                  </PrimaryButton>
-                </div>
-              </Reveal>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="divider-glow" />
-
-      {/* ================= PREV / NEXT ================= */}
-      <section className="py-12">
-        <div className="shell grid gap-4 sm:grid-cols-2">
-          {[
-            { p: prev, label: "Previous project" },
-            { p: next, label: "Next project" },
-          ].map(({ p, label }) => (
-            <Reveal key={label}>
-              <Link
-                to={`/work/${p.id}`}
-                className="premium-card group flex items-center justify-between gap-4 rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition hover:bg-white/[0.06]"
-              >
-                <div>
-                  <p className="font-mono text-[10px] tracking-[0.18em] text-slate-500 uppercase">
-                    {label}
-                  </p>
-                  <p className="font-display mt-2 text-lg font-bold text-white transition group-hover:text-brand-300">
-                    {p.title}
-                  </p>
-                  <p className="mt-1 text-[12.5px] text-slate-500">{p.client}</p>
-                </div>
-                <span
-                  aria-hidden
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-slate-400 transition-all duration-300 group-hover:border-brand-400/60 group-hover:text-white group-hover:bg-brand-500/15"
-                >
-                  →
-                </span>
-              </Link>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ================= RELATED ================= */}
-      <section className="border-t border-white/8 bg-ink-900/40 py-20">
         <div className="shell">
           <Reveal>
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-extrabold tracking-tight text-white md:text-3xl">
-                More <span className="text-gradient">case studies</span>
-              </h2>
-              <GhostButton to="/portfolio">View all</GhostButton>
-            </div>
+            <ScreenshotViewer project={project} />
           </Reveal>
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {related.map((p, i) => (
-              <Reveal key={p.id} delay={i * 80}>
-                <Link to={`/work/${p.id}`} className="group block h-full">
-                  <div className="premium-card h-full overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-                    <div className="relative aspect-[16/10] overflow-hidden">
-                      <div className={cn("absolute inset-0 bg-gradient-to-br", p.accent)} />
-                      <div className="project-visual absolute inset-0">
-                        <ProjectVisual project={p} />
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                      <div className="absolute bottom-3 left-3">
-                        <span className="rounded-full border border-white/15 bg-black/50 px-2.5 py-1 font-mono text-[9px] tracking-widest text-white uppercase backdrop-blur">
-                          {p.category}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="p-5">
-                      <p className="font-mono text-[10px] tracking-[0.18em] text-brand-300 uppercase">
-                        {p.client}
-                      </p>
-                      <p className="font-display mt-1.5 text-[16px] font-bold text-white transition group-hover:text-brand-300">
-                        {p.title}
-                      </p>
-                      <p className="mt-1.5 line-clamp-2 text-[13px] text-slate-400">{p.summary}</p>
-                    </div>
-                  </div>
-                </Link>
+        </div>
+      </section>
+
+      {project.metrics.length ? (
+        <section className="border-y border-gold-300/[0.07] bg-ink-900/50 py-14">
+          <div className="shell grid grid-cols-2 gap-10 md:grid-cols-4">
+            {project.metrics.map((m, i) => (
+              <Reveal key={m.label} delay={i * 70}>
+                <div>
+                  <div className="display text-gold text-[2.8rem] leading-none md:text-[3.4rem]">{m.value}</div>
+                  <div className="mt-3 text-[13px] text-mist">{m.label}</div>
+                </div>
               </Reveal>
             ))}
           </div>
+        </section>
+      ) : null}
+
+      <section className="py-24 md:py-28">
+        <div className="shell grid gap-6 lg:grid-cols-2">
+          {[
+            { label: studio ? "Why we built it" : "The problem", body: project.problem, icon: "target" },
+            { label: studio ? "What we built" : "Our solution", body: project.solution, icon: "wand" },
+          ].map((b, i) => (
+            <Reveal key={b.label} delay={i * 100}>
+              <div className="lux-card ticks h-full p-8 md:p-10">
+                <span className="icon-tile h-11 w-11 rounded-xl">
+                  <Icon name={b.icon} className="h-5 w-5" />
+                </span>
+                <h2 className="display mt-6 text-[1.9rem]">{b.label}</h2>
+                <p className="mt-4 text-[15.5px] leading-[1.8] text-sand">{b.body}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        <div className="shell mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <Reveal>
+            <div className="lux-card h-full p-8 md:p-10">
+              <p className="label">Key features</p>
+              <ul className="mt-6 space-y-4">
+                {project.features.map((f) => (
+                  <li key={f} className="flex gap-3.5">
+                    <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-gold-400/15 text-gold-300">
+                      <Icon name="check" className="h-3 w-3" strokeWidth={2.6} />
+                    </span>
+                    <span className="text-[15px] leading-relaxed text-parchment">{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <div className="lux-card h-full p-8 md:p-10">
+              <p className="label">Engineering decisions</p>
+              <ol className="mt-6 space-y-5">
+                {project.challenges.map((c, i) => (
+                  <li key={c} className="flex gap-4">
+                    <span className="font-mono text-[11px] text-gold-500">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="text-[14.5px] leading-relaxed text-sand">{c}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </Reveal>
+        </div>
+
+        <div className="shell mt-6">
+          <Reveal>
+            <div className="lux-card p-8 md:p-10">
+              <p className="label">Stack</p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                {project.stack.map((t) => (
+                  <span key={t} className="group inline-flex items-center gap-2.5 rounded-full border border-gold-300/12 py-1.5 pr-4 pl-1.5">
+                    <TechLogo name={t} icon={techIcons.get(t.toLowerCase()) ?? ""} size="sm" className="h-7 w-7 rounded-full" />
+                    <span className="text-[13px] font-medium text-parchment">{t}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="pb-24">
+        <div className="shell">
+          <Reveal>
+            <div className="lux-card gold-edge relative overflow-hidden p-10 md:p-14">
+              <div className="grid-lines absolute inset-0 opacity-50" aria-hidden />
+              <div className="relative flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="eyebrow">Built to this standard</p>
+                  <h2 className="display mt-5 text-[2.2rem] leading-tight md:text-[2.8rem]">
+                    Want something <span className="serif-accent text-gold">this solid?</span>
+                  </h2>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button to="/book" arrow track={`case_${project.id}_book`}>
+                    Book a call
+                  </Button>
+                  <Button to="/contact" variant="line">
+                    Send a brief
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+
+          {all.length > 1 ? (
+            <nav className="mt-10 grid gap-4 md:grid-cols-2" aria-label="More case studies">
+              {[
+                { p: prev, label: "Previous", icon: "arrow-left" },
+                { p: next, label: "Next", icon: "arrow" },
+              ].map(({ p, label, icon }) => (
+                <Link key={label} to={`/work/${p.id}`} className="lux-card lux-hover group flex items-center gap-5 p-5">
+                  <span className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-gold-300/10">
+                    <ProjectVisual project={p} compact />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="label">{label}</span>
+                    <span className="display mt-1 block truncate text-[1.4rem] group-hover:text-gold-100">{p.title}</span>
+                  </span>
+                  <Icon name={icon} className="h-4 w-4 text-gold-300" />
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </div>
       </section>
     </>

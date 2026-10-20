@@ -1,64 +1,128 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "../lib/router";
-import { company } from "../data/content";
+import { useSettings } from "../lib/content";
+import { track } from "../lib/api";
+import { phoneHref, whatsappLink } from "../lib/site";
+import { BrandMark } from "./Brand";
+import { Icon } from "./Icons";
+import { StatusDot, useStudioStatus } from "./StudioStatus";
 import { cn } from "../utils/cn";
 
 /**
- * Floating Quick Action Hub
- * Gives high-intent clients instant one-tap access to booking an intro call,
- * phone dialer, or project inquiry form.
+ * Concierge — a floating, one-tap contact hub for high-intent visitors.
  */
 export default function QuickDock() {
+  const settings = useSettings();
+  const status = useStudioStatus();
   const [visible, setVisible] = useState(false);
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      // Appear after user scrolls down 400px
-      setVisible(window.scrollY > 400);
+    // Show after the hero; step aside near the footer, which has every contact option.
+    const onScroll = () => {
+      const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 760;
+      setVisible(window.scrollY > 520 && !nearBottom);
     };
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const actions = [
+    { label: "WhatsApp", hint: "Fastest reply", icon: "whatsapp", href: whatsappLink(settings), external: true },
+    { label: "Book a 30-min call", hint: "Free, no obligation", icon: "calendar", to: "/book" },
+    { label: "Send a project brief", hint: "Get a written quote", icon: "doc", to: "/contact" },
+    { label: `Call ${settings.phone}`, hint: settings.hours, icon: "call", href: phoneHref(settings.phone) },
+  ];
 
   return (
     <aside
-      aria-label="Quick contact actions"
+      ref={panelRef}
+      aria-label="Contact concierge"
       className={cn(
-        "fixed right-4 bottom-5 z-40 flex flex-col items-end gap-2.5 transition-all duration-400 ease-out sm:right-6 sm:bottom-6",
-        visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-8 opacity-0",
+        "fixed right-4 bottom-5 z-40 flex flex-col items-end gap-3 transition-all duration-500 sm:right-6 sm:bottom-6",
+        visible || open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-8 opacity-0",
       )}
     >
-      {/* 30-min intro call button */}
-      <Link
-        to="/book"
-        className="glass-card group flex items-center gap-2.5 rounded-full px-4 py-2.5 text-[13px] font-medium text-slate-200 shadow-xl transition-all hover:border-brand-400/60 hover:bg-white/[0.08] hover:text-white"
+      <div
+        className={cn(
+          "lux-panel w-[300px] origin-bottom-right rounded-[22px] p-2 transition-all duration-400",
+          open ? "visible scale-100 opacity-100" : "invisible scale-95 opacity-0",
+        )}
       >
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-aqua-500 text-[11px] font-bold text-white shadow-sm">
-          30
-        </span>
-        <span>Schedule Call</span>
-      </Link>
+        <div className="flex items-center gap-3 border-b border-gold-300/10 px-3 pt-2 pb-3.5">
+          <BrandMark size={34} />
+          <div className="min-w-0">
+            <p className="text-[13.5px] font-semibold text-ivory">Talk to the founder</p>
+            <p className="flex items-center gap-1.5 text-[11.5px] text-mist">
+              <StatusDot online={status.online} className="h-1.5 w-1.5" />
+              {status.online ? "Online now — usually replies in minutes" : settings.responseTime}
+            </p>
+          </div>
+        </div>
+        <div className="mt-1.5 space-y-0.5">
+          {actions.map((a) => {
+            const inner = (
+              <>
+                <span className="icon-tile h-9 w-9 rounded-[11px]">
+                  <Icon name={a.icon} className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-parchment">{a.label}</span>
+                  <span className="block truncate text-[11px] text-smoke">{a.hint}</span>
+                </span>
+                <Icon name="arrow-up-right" className="h-3.5 w-3.5 text-smoke transition group-hover:text-gold-300" />
+              </>
+            );
+            const cls = "group flex items-center gap-3 rounded-2xl px-3 py-2.5 transition hover:bg-gold-300/[0.06]";
+            const onClick = () => {
+              track("cta_click", { label: `dock_${a.icon}` });
+              setOpen(false);
+            };
+            return a.to ? (
+              <Link key={a.label} to={a.to} className={cls} onClick={onClick}>
+                {inner}
+              </Link>
+            ) : (
+              <a key={a.label} href={a.href} className={cls} onClick={onClick} {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                {inner}
+              </a>
+            );
+          })}
+        </div>
+      </div>
 
-      {/* Direct Phone Dial */}
-      <a
-        href={company.phoneHref}
-        className="glass-card group flex items-center gap-2 rounded-full px-3.5 py-2 text-[12.5px] font-medium text-slate-300 shadow-lg transition-all hover:border-brand-400/50 hover:text-white"
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? "Close contact options" : "Open contact options"}
+        className="btn btn-gold shine h-14 rounded-full pr-5 pl-2 shadow-2xl"
       >
-        <span className="grid h-5 w-5 place-items-center rounded-full border border-white/12 bg-white/5 text-[11px] text-brand-300">
-          📞
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-950/90 text-gold-300">
+          <Icon name={open ? "close" : "chat"} className="h-[18px] w-[18px]" />
         </span>
-        <span>{company.phone}</span>
-      </a>
-
-      {/* Start Project CTA Pill */}
-      <Link
-        to="/contact"
-        className="shine flex items-center gap-2 rounded-full bg-gradient-to-r from-brand-500 via-indigo-500 to-aqua-500 px-5 py-3 font-display text-[13.5px] font-semibold text-white shadow-[0_12px_36px_-12px_rgba(79,70,229,0.95)] transition hover:brightness-110 active:scale-[0.98]"
-      >
-        <span>Start a Project</span>
-        <span aria-hidden>→</span>
-      </Link>
+        <span className="hidden sm:inline">{open ? "Close" : "Let's talk"}</span>
+      </button>
     </aside>
   );
 }

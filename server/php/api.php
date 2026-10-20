@@ -1,221 +1,1094 @@
 <?php
 /**
- * Novaframe Studio — PHP 8 / MySQL API layer
- * ==========================================
- * This mirrors server/index.ts (Express) exactly, so the same React frontend
- * can talk to either backend depending on where it is deployed:
- *
- *   • Node.js + Express + SQLite  →  server/index.ts        (VPS / container)
- *   • PHP 8 + PDO + MySQL         →  server/php/api.php    (shared hosting / cPanel)
+ * Novaframe Studio — PHP 8 + MySQL edition of the API
+ * ===================================================
+ * Same contract as server/index.ts (Express + SQLite), so the React site and
+ * admin console work unchanged on shared hosting (cPanel / Hostinger / Apache).
  *
  * Setup
- *   1. Import the schema:  mysql -u user -p novaframe < server/php/schema.sql
- *   2. Copy credentials into config.php (or set environment variables)
- *   3. Point the web server at this file, then set VITE_API_URL in the app
+ *   1. Create a MySQL database, then import schema.sql into it:
+ *        mysql -u <user> -p <database> < server/php/schema.sql   (or phpMyAdmin → Import)
+ *   2. Create server/php/.env with DB_HOST, DB_NAME, DB_USER, DB_PASSWORD,
+ *      ADMIN_EMAIL and ADMIN_PASSWORD (10+ characters) for the first owner
+ *   3. Upload the server/php folder as /api on your host (keeps .htaccess)
+ *   4. Build the site with VITE_API_URL=https://your-domain.com/api
  *
- * Endpoints (identical contract to the Express version)
- *   GET   /api/health
- *   GET   /api/services
- *   POST  /api/enquiries
- *   GET   /api/enquiries        (header: X-Admin-Token)
- *   PATCH /api/enquiries/{id}   (header: X-Admin-Token)
- *   POST  /api/subscribe
- *   POST  /api/events
- *   GET   /api/stats            (header: X-Admin-Token)
+ * Content and settings are seeded from seed.json on the first request.
+ * Passwords use PBKDF2-SHA512 (100k iterations) — hashes are compatible with
+ * the Node edition, so a database can move between the two.
  */
 
 declare(strict_types=1);
 
 require __DIR__ . '/config.php';
 
-/* ------------------------------------------------------------------ */
-/* Bootstrap                                                           */
-/* ------------------------------------------------------------------ */
 header('Content-Type: application/json; charset=utf-8');
-header('X-Content-Type-Options: nosniff');
-header('Referrer-Policy: strict-origin-when-cross-origin');
 
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$uri    = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
-$route  = preg_replace('#^.*/api#', '', $uri) ?: '/';
+const COLLECTIONS = ['services', 'projects', 'packages', 'team', 'testimonials', 'faqs', 'process', 'techStack', 'guarantees', 'whyUs', 'rhythm', 'milestones', 'insights'];
+const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost', 'archived'];
+const LEAD_PRIORITIES = ['low', 'normal', 'high'];
+const BOOKING_STATUSES = ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'];
+const ROLE_RANK = ['editor' => 1, 'admin' => 2, 'owner' => 3];
+const REQUIRED = [
+    'services' => ['title'], 'projects' => ['title', 'summary'], 'packages' => ['name', 'price'], 'team' => ['name', 'role'],
+    'testimonials' => ['name', 'quote'], 'faqs' => ['q', 'a'], 'process' => ['title'], 'techStack' => ['title'],
+    'guarantees' => ['title'], 'whyUs' => ['title'], 'rhythm' => ['title'], 'milestones' => ['title', 'year'], 'insights' => ['title', 'excerpt'],
+];
+const LEAD_COLUMNS = "id, reference, name, company_name AS companyName, email, phone, service, budget_range AS budget, timeline,
+  project_details AS details, status, priority, value_estimate AS valueEstimate, internal_notes AS notes, source,
+  created_at AS createdAt, updated_at AS updatedAt";
+const BOOKING_COLUMNS = "id, reference, name, email, phone, company_name AS companyName, topic, budget_range AS budget, notes,
+  slot_date AS date, slot_time AS time, timezone, status, meeting_link AS meetingLink, internal_notes AS internalNotes,
+  enquiry_id AS enquiryId, created_at AS createdAt, updated_at AS updatedAt";
 
-$ADMIN_TOKEN = env('ADMIN_TOKEN', 'novaframe-dev-token');
-$body        = json_decode(file_get_contents('php://input') ?: '[]', true) ?: [];
-
-try {
-    $pdo = db();
-    respond(dispatch($pdo, $route, $method, $body), $method === 'POST' || $method === 'PATCH' ? 201 : 200);
-} catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Internal server error']);
-    error_log('[novaframe-api] ' . $e->getMessage());
+/* ================================================================== */
+/* Helpers                                                            */
+/* ================================================================== */
+function respond(int $status, array $payload): void
+{
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
+    exit;
+}
+function ok($data = null, int $status = 200): void
+{
+    respond($status, ['ok' => true, 'data' => $data]);
+}
+function fail(int $status, string $error, array $extra = []): void
+{
+    respond($status, array_merge(['ok' => false, 'error' => $error], $extra));
 }
 
-/* ------------------------------------------------------------------ */
-/* Router                                                              */
-/* ------------------------------------------------------------------ */
-function dispatch(PDO $pdo, string $route, string $method, array $body): array
+function s($value, int $max): string
 {
+    if (!is_string($value)) {
+        return '';
+    }
+    $value = trim($value);
+    return function_exists('mb_substr') ? mb_substr($value, 0, $max) : substr($value, 0, $max);
+}
+function is_email(string $v): bool
+{
+    return (bool) filter_var($v, FILTER_VALIDATE_EMAIL);
+}
+function is_assoc($v): bool
+{
+    return is_array($v) && $v !== [] && array_keys($v) !== range(0, count($v) - 1);
+}
+function deep_merge($base, $override)
+{
+    if (!is_assoc($base) || !is_assoc($override)) {
+        return $override ?? $base;
+    }
+    foreach ($override as $k => $v) {
+        $base[$k] = (isset($base[$k]) && is_assoc($base[$k]) && is_assoc($v)) ? deep_merge($base[$k], $v) : $v;
+    }
+    return $base;
+}
+function client_ip(): string
+{
+    return substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 64);
+}
+function client_ua(): string
+{
+    return substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 300);
+}
+function new_reference(string $prefix): string
+{
+    return $prefix . '-' . strtoupper(bin2hex(random_bytes(3)));
+}
+function slugify(string $text): string
+{
+    $text = strtolower((string) preg_replace('/[^A-Za-z0-9]+/', '-', $text));
+    return substr(trim($text, '-'), 0, 72);
+}
+function date_in_tz(string $tz, int $offsetDays = 0): string
+{
+    try {
+        $d = new DateTime('now', new DateTimeZone($tz));
+    } catch (Throwable $e) {
+        $d = new DateTime('now', new DateTimeZone('UTC'));
+    }
+    if ($offsetDays !== 0) {
+        $d->modify(($offsetDays > 0 ? '+' : '') . $offsetDays . ' days');
+    }
+    return $d->format('Y-m-d');
+}
+function hash_password(string $password, ?string $salt = null): array
+{
+    $salt = $salt ?? bin2hex(random_bytes(16));
+    return ['hash' => hash_pbkdf2('sha512', $password, $salt, 100000, 128), 'salt' => $salt];
+}
+function verify_password(string $password, string $hash, string $salt): bool
+{
+    return hash_equals($hash, hash_pbkdf2('sha512', $password, $salt, 100000, 128));
+}
+function q(string $sql, array $params = []): PDOStatement
+{
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    return $stmt;
+}
+function one(string $sql, array $params = []): ?array
+{
+    $row = q($sql, $params)->fetch();
+    return $row === false ? null : $row;
+}
+function all_rows(string $sql, array $params = []): array
+{
+    return q($sql, $params)->fetchAll();
+}
+
+/* ================================================================== */
+/* Seed data, settings and content                                    */
+/* ================================================================== */
+function seed(): array
+{
+    static $seed = null;
+    if ($seed === null) {
+        $raw = @file_get_contents(__DIR__ . '/seed.json');
+        $seed = $raw ? (json_decode($raw, true) ?: []) : [];
+    }
+    return $seed;
+}
+function read_setting(string $key)
+{
+    $row = one('SELECT value FROM settings WHERE setting_key = ?', [$key]);
+    return $row ? json_decode((string) $row['value'], true) : null;
+}
+function write_setting(string $key, $value): void
+{
+    q('INSERT INTO settings (setting_key, value, updated_at) VALUES (?, ?, UTC_TIMESTAMP())
+       ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = UTC_TIMESTAMP()', [$key, json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+}
+function site_settings(): array
+{
+    return deep_merge(seed()['settings'] ?? [], read_setting('site') ?? []);
+}
+function advanced_settings(): array
+{
+    return deep_merge(seed()['advanced'] ?? [], read_setting('advanced') ?? []);
+}
+function seed_collection(string $name): void
+{
+    $items = seed()['collections'][$name] ?? [];
+    $pdo = db();
+    $pdo->beginTransaction();
+    q('DELETE FROM content WHERE collection = ?', [$name]);
+    foreach (array_values($items) as $i => $item) {
+        q('INSERT INTO content (collection, id, data, sort_order, published) VALUES (?, ?, ?, ?, 1)', [
+            $name, (string) $item['id'], json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), ($i + 1) * 10,
+        ]);
+    }
+    $pdo->commit();
+}
+function ensure_seeded(): void
+{
+    $seeded = read_setting('seeded_collections');
+    $seeded = is_array($seeded) ? $seeded : [];
+    $changed = false;
+    foreach (COLLECTIONS as $name) {
+        if (in_array($name, $seeded, true)) {
+            continue;
+        }
+        $count = (int) (one('SELECT count(*) AS c FROM content WHERE collection = ?', [$name])['c'] ?? 0);
+        if ($count === 0) {
+            seed_collection($name);
+        }
+        $seeded[] = $name;
+        $changed = true;
+    }
+    if ($changed) {
+        write_setting('seeded_collections', $seeded);
+    }
+    if (read_setting('site') === null) {
+        write_setting('site', seed()['settings'] ?? []);
+    }
+    if (read_setting('advanced') === null) {
+        write_setting('advanced', seed()['advanced'] ?? []);
+    }
+    $admins = (int) (one('SELECT count(*) AS c FROM admin_users')['c'] ?? 0);
+    $password = (string) env('ADMIN_PASSWORD');
+    if ($admins === 0 && strlen($password) >= 10) {
+        $h = hash_password($password);
+        q("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, 'owner')", [
+            strtolower(trim((string) env('ADMIN_EMAIL'))), $h['hash'], $h['salt'], (string) env('ADMIN_NAME'),
+        ]);
+    }
+}
+function parse_row(array $row): array
+{
+    $data = json_decode((string) $row['data'], true);
+    $data = is_array($data) ? $data : [];
+    $data['id'] = $row['id'];
+    return [
+        'id' => $row['id'],
+        'data' => $data,
+        'published' => (int) $row['published'] === 1,
+        'sortOrder' => (int) $row['sort_order'],
+        'createdAt' => $row['created_at'],
+        'updatedAt' => $row['updated_at'],
+    ];
+}
+function published(string $name): array
+{
+    return array_map(fn ($r) => parse_row($r)['data'], all_rows('SELECT * FROM content WHERE collection = ? AND published = 1 ORDER BY sort_order, created_at', [$name]));
+}
+function all_entries(string $name): array
+{
+    return array_map('parse_row', all_rows('SELECT * FROM content WHERE collection = ? ORDER BY sort_order, created_at', [$name]));
+}
+function estimate_value(string $budget): ?int
+{
+    foreach (advanced_settings()['budgetRanges'] ?? [] as $range) {
+        if (($range['label'] ?? null) === $budget) {
+            $min = (float) $range['min'];
+            return $range['max'] === null ? (int) round($min * 1.25) : (int) round(($min + (float) $range['max']) / 2);
+        }
+    }
+    return null;
+}
+
+/* ================================================================== */
+/* Rate limiting (table-backed fixed window)                          */
+/* ================================================================== */
+function rate_limit(string $bucket, int $max, int $windowSeconds, string $message = 'Too many requests — please try again in a little while.'): void
+{
+    $now = time();
+    $key = substr($bucket, 0, 190);
+    q('INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)
+       ON DUPLICATE KEY UPDATE hits = IF(reset_at <= ?, 1, hits + 1), reset_at = IF(reset_at <= ?, VALUES(reset_at), reset_at)', [$key, $now + $windowSeconds, $now, $now]);
+    $row = one('SELECT hits, reset_at FROM rate_limits WHERE bucket = ?', [$key]);
+    if ($row && (int) $row['hits'] > $max) {
+        header('Retry-After: ' . max(1, (int) $row['reset_at'] - $now));
+        fail(429, $message);
+    }
+    if (random_int(1, 50) === 1) {
+        q('DELETE FROM rate_limits WHERE reset_at <= ?', [$now]);
+    }
+}
+
+/* ================================================================== */
+/* Auth                                                               */
+/* ================================================================== */
+function bearer_token(): string
+{
+    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if ($header === '' && function_exists('getallheaders')) {
+        foreach (getallheaders() as $k => $v) {
+            if (strtolower((string) $k) === 'authorization') {
+                $header = (string) $v;
+            }
+        }
+    }
+    if (stripos($header, 'Bearer ') === 0) {
+        return trim(substr($header, 7));
+    }
+    return trim((string) ($_SERVER['HTTP_X_ADMIN_TOKEN'] ?? ''));
+}
+
+$ADMIN = null;
+
+function require_role(string $min = 'editor'): array
+{
+    global $ADMIN;
+    $token = bearer_token();
+    if ($token === '') {
+        fail(401, 'Authentication required.');
+    }
+    $row = one('SELECT s.id AS session_id, s.last_seen_at, u.id, u.email, u.full_name, u.role, u.active
+                FROM sessions s JOIN admin_users u ON u.id = s.user_id
+                WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP()', [hash('sha256', $token)]);
+    if (!$row || (int) $row['active'] !== 1) {
+        fail(401, 'Your session has expired. Please sign in again.');
+    }
+    if ((ROLE_RANK[$row['role']] ?? 0) < ROLE_RANK[$min]) {
+        fail(403, "Your role doesn't allow this action.");
+    }
+    if (time() - strtotime($row['last_seen_at'] . ' UTC') > 300) {
+        q('UPDATE sessions SET last_seen_at = UTC_TIMESTAMP() WHERE id = ?', [$row['session_id']]);
+    }
+    $ADMIN = ['id' => (int) $row['id'], 'email' => $row['email'], 'fullName' => $row['full_name'], 'role' => $row['role'], 'sessionId' => (int) $row['session_id']];
+    return $ADMIN;
+}
+function audit(string $action, string $target, string $details = ''): void
+{
+    global $ADMIN;
+    q('INSERT INTO audit_logs (admin_id, admin_email, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)', [
+        $ADMIN['id'] ?? null, $ADMIN['email'] ?? null, $action, substr($target, 0, 120), substr($details, 0, 500), client_ip(),
+    ]);
+}
+function public_user(array $u): array
+{
+    return ['id' => (int) $u['id'], 'email' => $u['email'], 'fullName' => $u['full_name'], 'role' => $u['role'], 'lastLoginAt' => $u['last_login_at'] ?? null];
+}
+
+/* ================================================================== */
+/* Analytics helpers                                                  */
+/* ================================================================== */
+function tz_minutes(): int
+{
+    return (int) env('TZ_OFFSET_MINUTES');
+}
+function daily_series(string $sql, int $days, array $params = []): array
+{
+    $map = [];
+    foreach (all_rows($sql, $params) as $r) {
+        $map[(string) $r['day']] = (int) $r['c'];
+    }
+    $tz = site_settings()['timezone'] ?? 'Asia/Kolkata';
+    $out = [];
+    for ($i = $days - 1; $i >= 0; $i--) {
+        $day = date_in_tz($tz, -$i);
+        $out[] = ['date' => $day, 'count' => $map[$day] ?? 0];
+    }
+    return $out;
+}
+
+/* ================================================================== */
+/* Router                                                             */
+/* ================================================================== */
+$method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+$path = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/');
+if (($pos = strpos($path, '/api.php')) !== false) {
+    $route = substr($path, $pos + 8);
+} elseif (preg_match('#/api(/.*)?$#', $path, $m)) {
+    $route = $m[1] ?? '/';
+} else {
+    $route = $path;
+}
+$route = '/' . trim($route, '/');
+
+$raw = file_get_contents('php://input') ?: '';
+$body = $raw === '' ? [] : json_decode($raw, true);
+if ($raw !== '' && !is_array($body)) {
+    fail(400, 'Malformed JSON body.');
+}
+$body = is_array($body) ? $body : [];
+
+try {
+    ensure_seeded();
+    dispatch($method, $route, $body);
+    fail(404, 'Route not found.');
+} catch (Throwable $e) {
+    error_log('[novaframe-api] ' . $e->getMessage());
+    if (str_contains($e->getMessage(), 'Duplicate entry') && str_contains($e->getMessage(), 'active_slot')) {
+        fail(409, 'That slot was just taken — please pick another time.', ['errors' => ['time' => 'Slot taken']]);
+    }
+    if ($e instanceof PDOException && preg_match('/SQLSTATE\[(HY000|08\d{3})\] \[\d+\]/', $e->getMessage())) {
+        fail(503, 'Database unavailable — check the DB_* values in server/php/.env and that schema.sql was imported.');
+    }
+    fail(500, 'Something went wrong on our side. Please try again.');
+}
+
+function dispatch(string $method, string $route, array $b): void
+{
+    $m = [];
+
+    /* -------------------------- Public -------------------------- */
     if ($route === '/health' && $method === 'GET') {
-        $count = (int) $pdo->query('SELECT COUNT(*) FROM services')->fetchColumn();
-        return ['ok' => true, 'service' => 'novaframe-php-api', 'database' => 'mysql', 'servicesSeeded' => $count];
+        $c = (int) (one('SELECT count(*) AS c FROM content')['c'] ?? 0);
+        ok(['service' => 'novaframe-php-api', 'database' => 'mysql', 'contentItems' => $c, 'time' => gmdate('c')]);
     }
 
-    if ($route === '/services' && $method === 'GET') {
-        $rows = $pdo->query('SELECT id, title, category FROM services WHERE active = 1 ORDER BY id')->fetchAll();
-        return ['ok' => true, 'data' => $rows];
+    if ($route === '/content' && $method === 'GET') {
+        $collections = [];
+        foreach (COLLECTIONS as $name) {
+            $collections[$name] = published($name);
+        }
+        $t = one('SELECT GREATEST(COALESCE((SELECT max(updated_at) FROM content), 0), COALESCE((SELECT max(updated_at) FROM settings), 0)) AS t');
+        header('Cache-Control: no-cache');
+        ok(['settings' => site_settings(), 'advanced' => advanced_settings(), 'collections' => $collections, 'version' => (string) ($t['t'] ?? '')]);
     }
 
-    if ($route === '/enquiries') {
-        if ($method === 'POST') {
-            return createEnquiry($pdo, $body);
+    if (preg_match('#^/content/([A-Za-z]+)$#', $route, $m) && $method === 'GET') {
+        if (!in_array($m[1], COLLECTIONS, true)) {
+            fail(404, 'Unknown collection.');
         }
-        if ($method === 'GET') {
-            guard();
-            $limit  = min(max((int) ($_GET['limit'] ?? 50), 1), 200);
-            $offset = max((int) ($_GET['offset'] ?? 0), 0);
-            $stmt   = $pdo->prepare(
-                'SELECT id, reference, name, company_name AS companyName, email, phone, service,
-                        budget_range AS budget, timeline, status, created_at AS createdAt
-                   FROM enquiries ORDER BY created_at DESC LIMIT :l OFFSET :o'
-            );
-            $stmt->execute([':l' => $limit, ':o' => $offset]);
-            $total = (int) $pdo->query('SELECT COUNT(*) FROM enquiries')->fetchColumn();
-            return ['ok' => true, 'total' => $total, 'data' => $stmt->fetchAll()];
-        }
+        ok(published($m[1]));
     }
 
-    if (preg_match('#^/enquiries/(\d+)$#', $route, $m) && $method === 'PATCH') {
-        guard();
-        $status = trim((string) ($body['status'] ?? ''));
-        $allowed = ['new', 'contacted', 'qualified', 'proposal', 'won', 'archived'];
-        if (!in_array($status, $allowed, true)) {
-            bad('Invalid status');
+    if ($route === '/enquiries' && $method === 'POST') {
+        rate_limit('form:' . client_ip(), 12, 3600);
+        if (s($b['website'] ?? '', 200) !== '') {
+            ok(['reference' => new_reference('NF'), 'message' => 'Received'], 201);
         }
-        $stmt = $pdo->prepare("UPDATE enquiries SET status = :s, updated_at = NOW() WHERE id = :id");
-        $stmt->execute([':s' => $status, ':id' => (int) $m[1]]);
-        if (!$stmt->rowCount()) {
-            bad('Not found', 404);
+        $name = s($b['name'] ?? '', 120);
+        $email = strtolower(s($b['email'] ?? '', 160));
+        $details = s($b['details'] ?? '', 5000);
+        $errors = [];
+        if (strlen($name) < 2) {
+            $errors['name'] = 'Please enter your name.';
         }
-        return ['ok' => true, 'id' => (int) $m[1], 'status' => $status];
+        if (!is_email($email)) {
+            $errors['email'] = 'Please enter a valid email address.';
+        }
+        if (strlen($details) < 10) {
+            $errors['details'] = 'Please share a little more detail about the project.';
+        }
+        if ($errors) {
+            fail(422, 'Please check the highlighted fields.', ['errors' => $errors]);
+        }
+        $budget = s($b['budget'] ?? '', 80) ?: 'Not specified';
+        $reference = new_reference('NF');
+        q('INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline, project_details, source, value_estimate, ip_address, user_agent)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $reference, $name, s($b['companyName'] ?? '', 160), $email, s($b['phone'] ?? '', 40),
+            s($b['service'] ?? '', 100) ?: 'General enquiry', $budget, s($b['timeline'] ?? '', 120), $details,
+            strtolower((string) preg_replace('/[^a-z_-]/i', '', s($b['source'] ?? '', 30))) ?: 'contact',
+            estimate_value($budget), client_ip(), client_ua(),
+        ]);
+        ok(['reference' => $reference, 'message' => 'Enquiry received. We reply within 12 business hours.'], 201);
+    }
+
+    if ($route === '/bookings/availability' && $method === 'GET') {
+        $settings = site_settings();
+        $tz = $settings['timezone'] ?? 'Asia/Kolkata';
+        $from = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($_GET['from'] ?? '')) ? (string) $_GET['from'] : date_in_tz($tz);
+        $to = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($_GET['to'] ?? '')) ? (string) $_GET['to'] : date_in_tz($tz, 45);
+        $taken = [];
+        foreach (all_rows("SELECT slot_date, slot_time FROM bookings WHERE slot_date BETWEEN ? AND ? AND status IN ('scheduled','confirmed')", [$from, $to]) as $r) {
+            $taken[$r['slot_date']][] = $r['slot_time'];
+        }
+        ok(['taken' => (object) $taken, 'slots' => $settings['booking']['slots'] ?? [], 'timezone' => $tz]);
+    }
+
+    if ($route === '/bookings' && $method === 'POST') {
+        rate_limit('form:' . client_ip(), 12, 3600);
+        if (s($b['website'] ?? '', 200) !== '') {
+            ok(['reference' => new_reference('NFC')], 201);
+        }
+        $settings = site_settings();
+        $tz = $settings['timezone'] ?? 'Asia/Kolkata';
+        $name = s($b['name'] ?? '', 120);
+        $email = strtolower(s($b['email'] ?? '', 160));
+        $date = s($b['date'] ?? '', 10);
+        $time = s($b['time'] ?? '', 12);
+        $topic = s($b['topic'] ?? '', 100) ?: 'Discovery call';
+        $errors = [];
+        if (strlen($name) < 2) {
+            $errors['name'] = 'Please enter your name.';
+        }
+        if (!is_email($email)) {
+            $errors['email'] = 'Please enter a valid email address.';
+        }
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $errors['date'] = 'Please choose a day.';
+        }
+        if (!in_array($time, $settings['booking']['slots'] ?? [], true)) {
+            $errors['time'] = 'Please choose one of the available times.';
+        }
+        if ($errors) {
+            fail(422, 'Please check the highlighted fields.', ['errors' => $errors]);
+        }
+        $weekday = (int) gmdate('w', strtotime($date . ' 12:00:00 UTC'));
+        $latest = date_in_tz($tz, (int) ($settings['booking']['daysAhead'] ?? 10) + 10);
+        if ($date <= date_in_tz($tz) || $date > $latest || !in_array($weekday, $settings['workingHours']['days'] ?? [], true)) {
+            fail(422, "That day isn't available for calls — please pick another.", ['errors' => ['date' => 'Unavailable day']]);
+        }
+        $budget = s($b['budget'] ?? '', 80);
+        $notes = s($b['notes'] ?? '', 2000);
+        $company = s($b['companyName'] ?? '', 160);
+        $phone = s($b['phone'] ?? '', 40);
+        $reference = new_reference('NFC');
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            q('INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline, project_details, source, value_estimate, ip_address, user_agent)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                new_reference('NF'), $name, $company, $email, $phone, "Discovery call — $topic", $budget ?: 'To discuss on call',
+                "Call booked for $date · $time " . ($settings['timezoneLabel'] ?? 'IST'), $notes ?: "Discovery call requested about: $topic.",
+                'booking', estimate_value($budget), client_ip(), client_ua(),
+            ]);
+            $enquiryId = (int) $pdo->lastInsertId();
+            q('INSERT INTO bookings (reference, name, email, phone, company_name, topic, budget_range, notes, slot_date, slot_time, timezone, enquiry_id, ip_address, user_agent)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                $reference, $name, $email, $phone, $company, $topic, $budget, $notes, $date, $time, $tz, $enquiryId, client_ip(), client_ua(),
+            ]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+        ok(['reference' => $reference, 'date' => $date, 'time' => $time, 'timezone' => $settings['timezoneLabel'] ?? 'IST', 'durationMinutes' => (int) ($settings['booking']['durationMinutes'] ?? 30)], 201);
     }
 
     if ($route === '/subscribe' && $method === 'POST') {
-        $email = filter_var(trim((string) ($body['email'] ?? '')), FILTER_VALIDATE_EMAIL);
-        if (!$email) {
-            bad('Invalid email', 422);
+        rate_limit('subscribe:' . client_ip(), 10, 3600);
+        $email = strtolower(s($b['email'] ?? '', 160));
+        if (!is_email($email)) {
+            fail(422, 'Please enter a valid email address.');
         }
-        $stmt = $pdo->prepare('INSERT IGNORE INTO subscribers (email) VALUES (?)');
-        $stmt->execute([$email]);
-        return ['ok' => true, 'message' => $stmt->rowCount() ? 'Subscribed' : 'Already subscribed'];
+        $stmt = q('INSERT IGNORE INTO subscribers (email, source) VALUES (?, ?)', [$email, s($b['source'] ?? '', 40) ?: 'footer']);
+        ok(['subscribed' => true, 'existing' => $stmt->rowCount() === 0]);
     }
 
     if ($route === '/events' && $method === 'POST') {
-        $name = trim((string) ($body['name'] ?? ''));
+        rate_limit('events:' . client_ip(), 120, 60);
+        $name = (string) preg_replace('/[^a-z0-9_:-]/i', '', s($b['name'] ?? '', 40));
         if ($name === '') {
-            bad('name required', 422);
+            fail(422, 'Event name required.');
         }
-        $stmt = $pdo->prepare('INSERT INTO page_events (event_name, path, meta) VALUES (?, ?, ?)');
-        $stmt->execute([
-            mb_substr($name, 0, 60),
-            mb_substr((string) ($body['path'] ?? ''), 0, 200),
-            json_encode($body['meta'] ?? new stdClass()),
+        $meta = is_assoc($b['meta'] ?? null) ? substr((string) json_encode($b['meta'], JSON_UNESCAPED_UNICODE), 0, 1000) : null;
+        q('INSERT INTO events (name, path, session_id, referrer, meta) VALUES (?, ?, ?, ?, ?)', [
+            $name, s($b['path'] ?? '', 200), s($b['sid'] ?? '', 64), s($b['referrer'] ?? '', 300), $meta,
         ]);
-        return ['ok' => true];
+        ok(null, 202);
     }
 
-    if ($route === '/stats' && $method === 'GET') {
-        guard();
-        return [
-            'ok'   => true,
-            'data' => [
-                'totalEnquiries' => (int) $pdo->query('SELECT COUNT(*) FROM enquiries')->fetchColumn(),
-                'newEnquiries'   => (int) $pdo->query("SELECT COUNT(*) FROM enquiries WHERE status = 'new'")->fetchColumn(),
-                'subscribers'    => (int) $pdo->query('SELECT COUNT(*) FROM subscribers')->fetchColumn(),
-                'events'         => (int) $pdo->query('SELECT COUNT(*) FROM page_events')->fetchColumn(),
+    if (!str_starts_with($route, '/admin')) {
+        return;
+    }
+
+    /* -------------------------- Auth -------------------------- */
+    global $ADMIN;
+
+    if ($route === '/admin/login' && $method === 'POST') {
+        $email = strtolower(s($b['email'] ?? '', 160));
+        $password = is_string($b['password'] ?? null) ? $b['password'] : '';
+        rate_limit('login:' . client_ip() . '|' . $email, 8, 900, 'Too many sign-in attempts. Please wait 15 minutes and try again.');
+        if ($email === '' || $password === '') {
+            fail(400, 'Email and password are required.');
+        }
+        if ((int) (one('SELECT count(*) AS c FROM admin_users')['c'] ?? 0) === 0) {
+            fail(503, 'No admin account yet — set ADMIN_EMAIL and ADMIN_PASSWORD (10+ characters) in server/php/.env, then sign in.');
+        }
+        $user = one('SELECT * FROM admin_users WHERE email = ?', [$email]);
+        $valid = $user ? verify_password($password, $user['password_hash'], $user['salt']) : (verify_password($password, str_repeat('0', 128), 'timing') && false);
+        if (!$user || !$valid || (int) $user['active'] !== 1) {
+            q('INSERT INTO audit_logs (admin_id, admin_email, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)', [$user['id'] ?? null, $email, 'LOGIN_FAILED', 'AUTH', 'Invalid credentials', client_ip()]);
+            fail(401, 'Invalid email or password.');
+        }
+        $token = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+        $expires = gmdate('Y-m-d H:i:s', time() + (int) env('SESSION_DAYS') * 86400);
+        q('INSERT INTO sessions (token_hash, user_id, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)', [hash('sha256', $token), $user['id'], client_ip(), client_ua(), $expires]);
+        q('UPDATE admin_users SET last_login_at = UTC_TIMESTAMP() WHERE id = ?', [$user['id']]);
+        $ADMIN = ['id' => (int) $user['id'], 'email' => $user['email'], 'fullName' => $user['full_name'], 'role' => $user['role'], 'sessionId' => 0];
+        audit('LOGIN', 'AUTH', 'Signed in');
+        ok(['token' => $token, 'expiresAt' => $expires, 'user' => public_user($user)]);
+    }
+
+    if ($route === '/admin/me' && $method === 'GET') {
+        $a = require_role('editor');
+        ok(['user' => public_user(one('SELECT * FROM admin_users WHERE id = ?', [$a['id']]) ?? [])]);
+    }
+
+    if ($route === '/admin/logout' && $method === 'POST') {
+        $a = require_role('editor');
+        q('DELETE FROM sessions WHERE id = ?', [$a['sessionId']]);
+        audit('LOGOUT', 'AUTH', 'Signed out');
+        ok();
+    }
+
+    if ($route === '/admin/password' && $method === 'POST') {
+        $a = require_role('editor');
+        $user = one('SELECT * FROM admin_users WHERE id = ?', [$a['id']]);
+        $current = is_string($b['currentPassword'] ?? null) ? $b['currentPassword'] : '';
+        $next = is_string($b['newPassword'] ?? null) ? $b['newPassword'] : '';
+        if (!$user || !verify_password($current, $user['password_hash'], $user['salt'])) {
+            fail(400, 'Your current password is incorrect.');
+        }
+        if (strlen($next) < 10) {
+            fail(422, 'The new password must be at least 10 characters.');
+        }
+        $h = hash_password($next);
+        q('UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?', [$h['hash'], $h['salt'], $a['id']]);
+        q('DELETE FROM sessions WHERE user_id = ? AND id != ?', [$a['id'], $a['sessionId']]);
+        audit('PASSWORD_CHANGED', 'USER_' . $a['id'], 'Password changed; other sessions revoked');
+        ok();
+    }
+
+    if ($route === '/admin/sessions' && $method === 'GET') {
+        $a = require_role('editor');
+        $rows = all_rows('SELECT id, ip_address, user_agent, created_at, last_seen_at, expires_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC', [$a['id']]);
+        ok(array_map(fn ($r) => $r + ['current' => (int) $r['id'] === $a['sessionId']], $rows));
+    }
+
+    if (preg_match('#^/admin/sessions/(\d+)$#', $route, $m) && $method === 'DELETE') {
+        $a = require_role('editor');
+        if (!q('DELETE FROM sessions WHERE id = ? AND user_id = ?', [(int) $m[1], $a['id']])->rowCount()) {
+            fail(404, 'Session not found.');
+        }
+        audit('SESSION_REVOKED', 'SESSION_' . $m[1]);
+        ok();
+    }
+
+    /* -------------------------- Dashboard -------------------------- */
+    if ($route === '/admin/overview' && $method === 'GET') {
+        require_role('admin');
+        $tzMin = tz_minutes();
+        $today = date_in_tz(site_settings()['timezone'] ?? 'Asia/Kolkata');
+        $leads = one("SELECT count(*) AS total, sum(status = 'new') AS fresh, sum(status = 'won') AS won, sum(status = 'lost') AS lost,
+            sum(created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY) AS last7,
+            sum(created_at < UTC_TIMESTAMP() - INTERVAL 7 DAY AND created_at >= UTC_TIMESTAMP() - INTERVAL 14 DAY) AS prev7,
+            sum(CASE WHEN status IN ('new','contacted','qualified','proposal') THEN coalesce(value_estimate, 0) END) AS pipeline,
+            sum(CASE WHEN status = 'won' THEN coalesce(value_estimate, 0) END) AS wonValue FROM enquiries") ?? [];
+        $traffic = one("SELECT count(*) AS views, count(DISTINCT session_id) AS visitors FROM events WHERE name = 'page_view' AND created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY") ?? [];
+        $subs = one('SELECT count(*) AS total, sum(created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY) AS last7 FROM subscribers') ?? [];
+        $upcoming = (int) (one("SELECT count(*) AS c FROM bookings WHERE slot_date >= ? AND status IN ('scheduled','confirmed')", [$today])['c'] ?? 0);
+        $won = (int) ($leads['won'] ?? 0);
+        $decided = $won + (int) ($leads['lost'] ?? 0);
+        ok([
+            'kpis' => [
+                'leadsTotal' => (int) ($leads['total'] ?? 0),
+                'leadsNew' => (int) ($leads['fresh'] ?? 0),
+                'leads7d' => (int) ($leads['last7'] ?? 0),
+                'leadsPrev7d' => (int) ($leads['prev7'] ?? 0),
+                'won' => $won,
+                'winRate' => $decided ? (int) round($won / $decided * 100) : null,
+                'pipelineValue' => (int) ($leads['pipeline'] ?? 0),
+                'wonValue' => (int) ($leads['wonValue'] ?? 0),
+                'bookingsUpcoming' => $upcoming,
+                'subscribers' => (int) ($subs['total'] ?? 0),
+                'subscribers7d' => (int) ($subs['last7'] ?? 0),
+                'views7d' => (int) ($traffic['views'] ?? 0),
+                'visitors7d' => (int) ($traffic['visitors'] ?? 0),
             ],
-        ];
+            'leadsSeries' => daily_series("SELECT DATE(created_at + INTERVAL $tzMin MINUTE) AS day, count(*) AS c FROM enquiries WHERE created_at >= UTC_TIMESTAMP() - INTERVAL 31 DAY GROUP BY day", 30),
+            'viewsSeries' => daily_series("SELECT DATE(created_at + INTERVAL $tzMin MINUTE) AS day, count(*) AS c FROM events WHERE name = 'page_view' AND created_at >= UTC_TIMESTAMP() - INTERVAL 31 DAY GROUP BY day", 30),
+            'pipeline' => array_map(fn ($r) => ['status' => $r['status'], 'count' => (int) $r['count'], 'value' => (int) $r['value']], all_rows('SELECT status, count(*) AS count, coalesce(sum(value_estimate), 0) AS value FROM enquiries GROUP BY status')),
+            'sources' => array_map(fn ($r) => ['source' => $r['source'], 'count' => (int) $r['count']], all_rows('SELECT source, count(*) AS count FROM enquiries GROUP BY source ORDER BY count DESC')),
+            'services' => array_map(fn ($r) => ['service' => $r['service'], 'count' => (int) $r['count']], all_rows('SELECT service, count(*) AS count FROM enquiries GROUP BY service ORDER BY count DESC LIMIT 6')),
+            'upcomingBookings' => all_rows("SELECT id, reference, name, company_name AS companyName, topic, slot_date AS date, slot_time AS time, status, meeting_link AS meetingLink
+                FROM bookings WHERE slot_date >= ? AND status IN ('scheduled','confirmed') ORDER BY slot_date, slot_time LIMIT 6", [$today]),
+            'recentLeads' => all_rows('SELECT id, reference, name, company_name AS companyName, service, budget_range AS budget, status, priority, created_at AS createdAt FROM enquiries ORDER BY created_at DESC, id DESC LIMIT 6'),
+            'recentActivity' => all_rows('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8'),
+            'content' => array_map(fn ($r) => ['collection' => $r['collection'], 'published' => (int) $r['published'], 'total' => (int) $r['total']], all_rows('SELECT collection, sum(published) AS published, count(*) AS total FROM content GROUP BY collection')),
+        ]);
     }
 
-    bad('Route not found', 404);
-}
-
-/* ------------------------------------------------------------------ */
-/* Handlers                                                            */
-/* ------------------------------------------------------------------ */
-function createEnquiry(PDO $pdo, array $b): array
-{
-    $errors = [];
-    $name    = trim((string) ($b['name'] ?? ''));
-    $email   = trim((string) ($b['email'] ?? ''));
-    $service = trim((string) ($b['service'] ?? ''));
-    $budget  = trim((string) ($b['budget'] ?? ''));
-    $details = trim((string) ($b['details'] ?? ''));
-
-    if (mb_strlen($name) < 2)                       { $errors['name'] = 'Invalid or missing value'; }
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { $errors['email'] = 'Invalid or missing value'; }
-    if ($service === '')                            { $errors['service'] = 'Invalid or missing value'; }
-    if ($budget === '')                             { $errors['budget'] = 'Invalid or missing value'; }
-    if (mb_strlen($details) < 20)                   { $errors['details'] = 'Invalid or missing value'; }
-
-    if ($errors) {
-        http_response_code(422);
-        echo json_encode(['ok' => false, 'errors' => $errors]);
-        exit;
+    if ($route === '/admin/analytics' && $method === 'GET') {
+        require_role('admin');
+        $days = min(max((int) ($_GET['days'] ?? 30), 7), 180);
+        $tzMin = tz_minutes();
+        $since = "UTC_TIMESTAMP() - INTERVAL $days DAY";
+        $views = daily_series("SELECT DATE(created_at + INTERVAL $tzMin MINUTE) AS day, count(*) AS c FROM events WHERE name = 'page_view' AND created_at >= $since GROUP BY day", $days);
+        $visitors = daily_series("SELECT DATE(created_at + INTERVAL $tzMin MINUTE) AS day, count(DISTINCT session_id) AS c FROM events WHERE name = 'page_view' AND created_at >= $since GROUP BY day", $days);
+        $totals = one("SELECT count(*) AS views, count(DISTINCT session_id) AS visitors FROM events WHERE name = 'page_view' AND created_at >= $since") ?? [];
+        $leadCount = (int) (one("SELECT count(*) AS c FROM enquiries WHERE created_at >= $since")['c'] ?? 0);
+        $visitorCount = (int) ($totals['visitors'] ?? 0);
+        $series = [];
+        foreach ($views as $i => $v) {
+            $series[] = ['date' => $v['date'], 'views' => $v['count'], 'visitors' => $visitors[$i]['count'] ?? 0];
+        }
+        ok([
+            'days' => $days,
+            'totals' => ['views' => (int) ($totals['views'] ?? 0), 'visitors' => $visitorCount, 'leads' => $leadCount, 'conversion' => $visitorCount ? round($leadCount / $visitorCount * 100, 2) : 0],
+            'series' => $series,
+            'topPages' => array_map(fn ($r) => ['path' => $r['path'], 'views' => (int) $r['views']], all_rows("SELECT path, count(*) AS views FROM events WHERE name = 'page_view' AND created_at >= $since GROUP BY path ORDER BY views DESC LIMIT 10")),
+            'topEvents' => array_map(fn ($r) => ['name' => $r['name'], 'count' => (int) $r['count']], all_rows("SELECT name, count(*) AS count FROM events WHERE name != 'page_view' AND created_at >= $since GROUP BY name ORDER BY count DESC LIMIT 10")),
+            'ctas' => array_map(fn ($r) => ['label' => $r['label'] ?? 'unknown', 'count' => (int) $r['count']], all_rows("SELECT coalesce(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.label')), 'unknown') AS label, count(*) AS count FROM events WHERE name = 'cta_click' AND created_at >= $since GROUP BY label ORDER BY count DESC LIMIT 10")),
+            'referrers' => array_map(fn ($r) => ['referrer' => $r['referrer'], 'count' => (int) $r['count']], all_rows("SELECT referrer, count(*) AS count FROM events WHERE name = 'page_view' AND referrer IS NOT NULL AND referrer != '' AND created_at >= $since GROUP BY referrer ORDER BY count DESC LIMIT 8")),
+        ]);
     }
 
-    $reference = 'NF-' . strtoupper(bin2hex(random_bytes(3)));
-
-    $stmt = $pdo->prepare(
-        'INSERT INTO enquiries
-           (reference, name, company_name, email, phone, service, budget_range,
-            timeline, project_details, source, ip_address, user_agent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([
-        $reference,
-        mb_substr($name, 0, 120),
-        mb_substr(trim((string) ($b['companyName'] ?? '')), 0, 160),
-        mb_strtolower(mb_substr($email, 0, 160)),
-        mb_substr(trim((string) ($b['phone'] ?? '')), 0, 40),
-        mb_substr($service, 0, 80),
-        mb_substr($budget, 0, 80),
-        mb_substr(trim((string) ($b['timeline'] ?? '')), 0, 80),
-        mb_substr($details, 0, 4000),
-        mb_substr(trim((string) ($b['source'] ?? 'website')), 0, 60),
-        $_SERVER['REMOTE_ADDR'] ?? '',
-        mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 400),
-    ]);
-
-    return [
-        'ok'       => true,
-        'reference' => $reference,
-        'id'       => (int) $pdo->lastInsertId(),
-        'message'  => 'Enquiry received. We reply within 12 business hours.',
-    ];
-}
-
-/* ------------------------------------------------------------------ */
-/* Utilities                                                           */
-/* ------------------------------------------------------------------ */
-function guard(): void
-{
-    $token = $_SERVER['HTTP_X_ADMIN_TOKEN']
-        ?? (isset($_SERVER['HTTP_AUTHORIZATION']) ? trim(str_replace('Bearer ', '', $_SERVER['HTTP_AUTHORIZATION'])) : '');
-    if (!hash_equals(env('ADMIN_TOKEN', 'novaframe-dev-token'), (string) $token)) {
-        bad('Unauthorized', 401);
+    /* -------------------------- Leads -------------------------- */
+    if ($route === '/admin/enquiries' && $method === 'GET') {
+        require_role('admin');
+        ok(all_rows('SELECT ' . LEAD_COLUMNS . ' FROM enquiries ORDER BY created_at DESC, id DESC'));
     }
-}
 
-function bad(string $message, int $code = 422): void
-{
-    http_response_code($code);
-    echo json_encode(['ok' => false, 'error' => $message]);
-    exit;
-}
+    if (preg_match('#^/admin/enquiries/(\d+)$#', $route, $m)) {
+        $a = require_role('admin');
+        $id = (int) $m[1];
+        $lead = one('SELECT ' . LEAD_COLUMNS . ' FROM enquiries WHERE id = ?', [$id]);
+        if (!$lead) {
+            fail(404, 'Lead not found.');
+        }
+        if ($method === 'GET') {
+            $activity = all_rows('SELECT id, kind, body, admin_name AS author, created_at AS createdAt FROM enquiry_notes WHERE enquiry_id = ? ORDER BY id DESC', [$id]);
+            $booking = one('SELECT id, reference, slot_date AS date, slot_time AS time, status FROM bookings WHERE enquiry_id = ?', [$id]);
+            ok($lead + ['activity' => $activity, 'booking' => $booking]);
+        }
+        if ($method === 'PATCH') {
+            $sets = [];
+            $params = [];
+            if (array_key_exists('status', $b)) {
+                if (!in_array($b['status'], LEAD_STATUSES, true)) {
+                    fail(422, 'Invalid status.');
+                }
+                $sets[] = 'status = ?';
+                $params[] = $b['status'];
+            }
+            if (array_key_exists('priority', $b)) {
+                if (!in_array($b['priority'], LEAD_PRIORITIES, true)) {
+                    fail(422, 'Invalid priority.');
+                }
+                $sets[] = 'priority = ?';
+                $params[] = $b['priority'];
+            }
+            if (array_key_exists('valueEstimate', $b)) {
+                $v = $b['valueEstimate'];
+                $v = ($v === null || $v === '') ? null : max(0, (int) round((float) $v));
+                $sets[] = 'value_estimate = ?';
+                $params[] = $v;
+            }
+            if (array_key_exists('notes', $b)) {
+                $sets[] = 'internal_notes = ?';
+                $params[] = s($b['notes'], 4000);
+            }
+            if (!$sets) {
+                fail(400, 'Nothing to update.');
+            }
+            $params[] = $id;
+            q('UPDATE enquiries SET ' . implode(', ', $sets) . ', updated_at = UTC_TIMESTAMP() WHERE id = ?', $params);
+            if (array_key_exists('status', $b) && $b['status'] !== $lead['status']) {
+                q('INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)', [$id, $a['id'], $a['fullName'], 'status', "Status changed from {$lead['status']} to {$b['status']}"]);
+            }
+            if (array_key_exists('priority', $b) && $b['priority'] !== $lead['priority']) {
+                q('INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)', [$id, $a['id'], $a['fullName'], 'priority', "Priority set to {$b['priority']}"]);
+            }
+            audit('LEAD_UPDATED', "LEAD_$id", implode(', ', array_keys($b)));
+            ok(one('SELECT ' . LEAD_COLUMNS . ' FROM enquiries WHERE id = ?', [$id]));
+        }
+        if ($method === 'DELETE') {
+            q('DELETE FROM enquiries WHERE id = ?', [$id]);
+            audit('LEAD_DELETED', "LEAD_$id");
+            ok();
+        }
+    }
 
-function respond(array $payload, int $code = 200): void
-{
-    http_response_code($code);
-    echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (preg_match('#^/admin/enquiries/(\d+)/notes$#', $route, $m) && $method === 'POST') {
+        $a = require_role('admin');
+        $id = (int) $m[1];
+        $text = s($b['body'] ?? '', 4000);
+        if ($text === '') {
+            fail(422, "Note can't be empty.");
+        }
+        if (!one('SELECT id FROM enquiries WHERE id = ?', [$id])) {
+            fail(404, 'Lead not found.');
+        }
+        q('INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)', [$id, $a['id'], $a['fullName'], 'note', $text]);
+        $noteId = (int) db()->lastInsertId();
+        q('UPDATE enquiries SET updated_at = UTC_TIMESTAMP() WHERE id = ?', [$id]);
+        audit('LEAD_NOTE', "LEAD_$id");
+        ok(['id' => $noteId, 'kind' => 'note', 'body' => $text, 'author' => $a['fullName'], 'createdAt' => gmdate('c')], 201);
+    }
+
+    /* -------------------------- Bookings -------------------------- */
+    if ($route === '/admin/bookings' && $method === 'GET') {
+        require_role('admin');
+        ok(all_rows('SELECT ' . BOOKING_COLUMNS . ' FROM bookings ORDER BY slot_date DESC, slot_time DESC'));
+    }
+
+    if (preg_match('#^/admin/bookings/(\d+)$#', $route, $m)) {
+        require_role('admin');
+        $id = (int) $m[1];
+        if (!one('SELECT id FROM bookings WHERE id = ?', [$id])) {
+            fail(404, 'Booking not found.');
+        }
+        if ($method === 'PATCH') {
+            $sets = [];
+            $params = [];
+            if (array_key_exists('status', $b)) {
+                if (!in_array($b['status'], BOOKING_STATUSES, true)) {
+                    fail(422, 'Invalid status.');
+                }
+                $sets[] = 'status = ?';
+                $params[] = $b['status'];
+            }
+            if (array_key_exists('meetingLink', $b)) {
+                $link = s($b['meetingLink'], 300);
+                if ($link !== '' && !preg_match('#^https?://#i', $link)) {
+                    fail(422, 'Meeting link must start with http:// or https://');
+                }
+                $sets[] = 'meeting_link = ?';
+                $params[] = $link;
+            }
+            if (array_key_exists('internalNotes', $b)) {
+                $sets[] = 'internal_notes = ?';
+                $params[] = s($b['internalNotes'], 4000);
+            }
+            if (array_key_exists('date', $b) || array_key_exists('time', $b)) {
+                $date = s($b['date'] ?? '', 10);
+                $time = s($b['time'] ?? '', 12);
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $time === '') {
+                    fail(422, 'Provide both a valid date and time.');
+                }
+                $sets[] = 'slot_date = ?';
+                $sets[] = 'slot_time = ?';
+                array_push($params, $date, $time);
+            }
+            if (!$sets) {
+                fail(400, 'Nothing to update.');
+            }
+            $params[] = $id;
+            try {
+                q('UPDATE bookings SET ' . implode(', ', $sets) . ', updated_at = UTC_TIMESTAMP() WHERE id = ?', $params);
+            } catch (Throwable $e) {
+                if (str_contains($e->getMessage(), 'Duplicate entry')) {
+                    fail(409, 'Another call is already booked in that slot.');
+                }
+                throw $e;
+            }
+            audit('BOOKING_UPDATED', "BOOKING_$id", implode(', ', array_keys($b)));
+            ok(one('SELECT ' . BOOKING_COLUMNS . ' FROM bookings WHERE id = ?', [$id]));
+        }
+        if ($method === 'DELETE') {
+            q('DELETE FROM bookings WHERE id = ?', [$id]);
+            audit('BOOKING_DELETED', "BOOKING_$id");
+            ok();
+        }
+    }
+
+    /* -------------------------- Subscribers -------------------------- */
+    if ($route === '/admin/subscribers' && $method === 'GET') {
+        require_role('admin');
+        ok(all_rows('SELECT id, email, source, created_at AS createdAt FROM subscribers ORDER BY id DESC'));
+    }
+
+    if (preg_match('#^/admin/subscribers/(\d+)$#', $route, $m) && $method === 'DELETE') {
+        require_role('admin');
+        if (!q('DELETE FROM subscribers WHERE id = ?', [(int) $m[1]])->rowCount()) {
+            fail(404, 'Subscriber not found.');
+        }
+        audit('SUBSCRIBER_DELETED', 'SUBSCRIBER_' . $m[1]);
+        ok();
+    }
+
+    /* -------------------------- CMS -------------------------- */
+    if (preg_match('#^/admin/content/([A-Za-z]+)(?:/([^/]+))?(?:/(reorder|reset))?$#', $route, $m)) {
+        $name = $m[1];
+        if (!in_array($name, COLLECTIONS, true)) {
+            fail(404, 'Unknown collection.');
+        }
+        $second = isset($m[2]) ? rawurldecode($m[2]) : '';
+        $action = $m[3] ?? (in_array($second, ['reorder', 'reset'], true) ? $second : '');
+        $id = ($second !== '' && !in_array($second, ['reorder', 'reset'], true)) ? $second : '';
+
+        $validate = function ($data) use ($name): void {
+            if (!is_assoc($data)) {
+                fail(422, 'Content must be an object.');
+            }
+            if (strlen((string) json_encode($data)) > 200000) {
+                fail(422, 'This entry is too large.');
+            }
+            foreach (REQUIRED[$name] as $field) {
+                if (!is_string($data[$field] ?? null) || trim($data[$field]) === '') {
+                    fail(422, "\"$field\" is required.");
+                }
+            }
+        };
+
+        if ($action === 'reorder' && $method === 'POST') {
+            require_role('editor');
+            $ids = is_array($b['ids'] ?? null) ? array_map('strval', $b['ids']) : [];
+            if (!$ids) {
+                fail(422, 'Provide the new order as an array of IDs.');
+            }
+            foreach ($ids as $i => $eid) {
+                q('UPDATE content SET sort_order = ?, updated_at = UTC_TIMESTAMP() WHERE collection = ? AND id = ?', [($i + 1) * 10, $name, $eid]);
+            }
+            audit('CONTENT_REORDERED', $name);
+            ok(all_entries($name));
+        }
+        if ($action === 'reset' && $method === 'POST') {
+            require_role('admin');
+            seed_collection($name);
+            audit('CONTENT_RESET', $name, 'Restored shipped defaults');
+            ok(all_entries($name));
+        }
+        if ($id === '' && $method === 'GET') {
+            require_role('editor');
+            ok(all_entries($name));
+        }
+        if ($id === '' && $method === 'POST') {
+            require_role('editor');
+            $data = $b['data'] ?? null;
+            $validate($data);
+            $base = s($b['id'] ?? '', 80) ?: (s($data['id'] ?? '', 80) ?: slugify((string) ($data['title'] ?? $data['name'] ?? $data['q'] ?? 'item')));
+            $newId = slugify($base) ?: 'item-' . base_convert((string) time(), 10, 36);
+            while (one('SELECT id FROM content WHERE collection = ? AND id = ?', [$name, $newId])) {
+                $newId = substr(slugify($base), 0, 70) . '-' . bin2hex(random_bytes(2));
+            }
+            $data['id'] = $newId;
+            $max = (int) (one('SELECT coalesce(max(sort_order), 0) AS m FROM content WHERE collection = ?', [$name])['m'] ?? 0);
+            q('INSERT INTO content (collection, id, data, sort_order, published) VALUES (?, ?, ?, ?, ?)', [
+                $name, $newId, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $max + 10, ($b['published'] ?? true) === false ? 0 : 1,
+            ]);
+            audit('CONTENT_CREATED', "$name/$newId", (string) ($data['title'] ?? $data['name'] ?? $data['q'] ?? ''));
+            ok(parse_row(one('SELECT * FROM content WHERE collection = ? AND id = ?', [$name, $newId])), 201);
+        }
+        if ($id !== '') {
+            require_role('editor');
+            $row = one('SELECT * FROM content WHERE collection = ? AND id = ?', [$name, $id]);
+            if (!$row) {
+                fail(404, 'Entry not found.');
+            }
+            if ($method === 'PUT') {
+                $data = $b['data'] ?? null;
+                $validate($data);
+                $requested = s($b['newId'] ?? '', 80);
+                if ($requested !== '' && $requested !== $id) {
+                    if (!preg_match('/^[a-z0-9][a-z0-9-]{0,79}$/', $requested)) {
+                        fail(422, 'Invalid ID — use lowercase letters, numbers and dashes.');
+                    }
+                    if (one('SELECT id FROM content WHERE collection = ? AND id = ?', [$name, $requested])) {
+                        fail(409, 'Another entry already uses that ID.');
+                    }
+                    q('UPDATE content SET id = ? WHERE collection = ? AND id = ?', [$requested, $name, $id]);
+                    $id = $requested;
+                }
+                $data['id'] = $id;
+                $published = array_key_exists('published', $b) ? ($b['published'] ? 1 : 0) : (int) $row['published'];
+                $sort = isset($b['sortOrder']) && is_numeric($b['sortOrder']) ? (int) $b['sortOrder'] : (int) $row['sort_order'];
+                q('UPDATE content SET data = ?, published = ?, sort_order = ?, updated_at = UTC_TIMESTAMP() WHERE collection = ? AND id = ?', [
+                    json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $published, $sort, $name, $id,
+                ]);
+                audit('CONTENT_UPDATED', "$name/$id");
+                ok(parse_row(one('SELECT * FROM content WHERE collection = ? AND id = ?', [$name, $id])));
+            }
+            if ($method === 'DELETE') {
+                q('DELETE FROM content WHERE collection = ? AND id = ?', [$name, $id]);
+                audit('CONTENT_DELETED', "$name/$id");
+                ok();
+            }
+        }
+    }
+
+    /* -------------------------- Settings -------------------------- */
+    if ($route === '/admin/settings' && $method === 'GET') {
+        require_role('editor');
+        ok(['site' => site_settings(), 'advanced' => advanced_settings()]);
+    }
+
+    if (preg_match('#^/admin/settings/(site|advanced)$#', $route, $m) && $method === 'PUT') {
+        require_role('admin');
+        $key = $m[1];
+        $value = $b['value'] ?? null;
+        if (!is_assoc($value)) {
+            fail(422, 'Settings must be an object.');
+        }
+        if (strlen((string) json_encode($value)) > 300000) {
+            fail(422, 'Settings document is too large.');
+        }
+        if ($key === 'site') {
+            if (array_key_exists('email', $value) && !is_email((string) $value['email'])) {
+                fail(422, 'Please provide a valid contact email.');
+            }
+            if (array_key_exists('whatsapp', $value) && !preg_match('/^\d{8,15}$/', (string) $value['whatsapp'])) {
+                fail(422, 'WhatsApp must be digits only, with country code (e.g. 918447859784).');
+            }
+            if (isset($value['booking']['slots']) && (!is_array($value['booking']['slots']) || !$value['booking']['slots'])) {
+                fail(422, 'Provide at least one booking time slot.');
+            }
+        } else {
+            if (isset($value['estimator']) && (!is_array($value['estimator']['types'] ?? null) || !$value['estimator']['types'])) {
+                fail(422, 'The estimator needs at least one project type.');
+            }
+        }
+        $merged = deep_merge($key === 'site' ? site_settings() : advanced_settings(), $value);
+        write_setting($key, $merged);
+        audit('SETTINGS_UPDATED', 'SETTINGS_' . strtoupper($key));
+        ok($key === 'site' ? site_settings() : advanced_settings());
+    }
+
+    /* -------------------------- Audit, users, export -------------------------- */
+    if ($route === '/admin/audit' && $method === 'GET') {
+        require_role('admin');
+        $limit = min(max((int) ($_GET['limit'] ?? 100), 10), 500);
+        ok(all_rows("SELECT * FROM audit_logs ORDER BY id DESC LIMIT $limit"));
+    }
+
+    if ($route === '/admin/users' && $method === 'GET') {
+        require_role('owner');
+        ok(array_map(fn ($u) => public_user($u) + ['active' => (int) $u['active'] === 1, 'createdAt' => $u['created_at']], all_rows('SELECT id, email, full_name, role, active, last_login_at, created_at FROM admin_users ORDER BY id')));
+    }
+
+    if ($route === '/admin/users' && $method === 'POST') {
+        require_role('owner');
+        $email = strtolower(s($b['email'] ?? '', 160));
+        $fullName = s($b['fullName'] ?? '', 120);
+        $role = (string) ($b['role'] ?? 'editor');
+        $password = is_string($b['password'] ?? null) ? $b['password'] : '';
+        if (!is_email($email)) {
+            fail(422, 'Please provide a valid email.');
+        }
+        if (strlen($fullName) < 2) {
+            fail(422, "Please provide the person's name.");
+        }
+        if (!isset(ROLE_RANK[$role])) {
+            fail(422, 'Invalid role.');
+        }
+        if (strlen($password) < 10) {
+            fail(422, 'Temporary password must be at least 10 characters.');
+        }
+        if (one('SELECT id FROM admin_users WHERE email = ?', [$email])) {
+            fail(409, 'A user with that email already exists.');
+        }
+        $h = hash_password($password);
+        q('INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, ?)', [$email, $h['hash'], $h['salt'], $fullName, $role]);
+        $newId = (int) db()->lastInsertId();
+        audit('USER_CREATED', "USER_$newId", "$email as $role");
+        ok(['id' => $newId], 201);
+    }
+
+    if (preg_match('#^/admin/users/(\d+)$#', $route, $m)) {
+        $a = require_role('owner');
+        $id = (int) $m[1];
+        $user = one('SELECT * FROM admin_users WHERE id = ?', [$id]);
+        if (!$user) {
+            fail(404, 'User not found.');
+        }
+        if ($method === 'PATCH') {
+            $demoting = $user['role'] === 'owner' && ((isset($b['role']) && $b['role'] !== 'owner') || (array_key_exists('active', $b) && !$b['active']));
+            if ($demoting && (int) (one("SELECT count(*) AS c FROM admin_users WHERE role = 'owner' AND active = 1")['c'] ?? 0) <= 1) {
+                fail(422, 'At least one active owner is required.');
+            }
+            if (isset($b['role'])) {
+                if (!isset(ROLE_RANK[$b['role']])) {
+                    fail(422, 'Invalid role.');
+                }
+                q('UPDATE admin_users SET role = ? WHERE id = ?', [$b['role'], $id]);
+            }
+            if (isset($b['fullName'])) {
+                q('UPDATE admin_users SET full_name = ? WHERE id = ?', [s($b['fullName'], 120), $id]);
+            }
+            if (array_key_exists('active', $b)) {
+                q('UPDATE admin_users SET active = ? WHERE id = ?', [$b['active'] ? 1 : 0, $id]);
+                if (!$b['active']) {
+                    q('DELETE FROM sessions WHERE user_id = ?', [$id]);
+                }
+            }
+            if (array_key_exists('password', $b)) {
+                if (!is_string($b['password']) || strlen($b['password']) < 10) {
+                    fail(422, 'Password must be at least 10 characters.');
+                }
+                $h = hash_password($b['password']);
+                q('UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?', [$h['hash'], $h['salt'], $id]);
+                q('DELETE FROM sessions WHERE user_id = ?', [$id]);
+            }
+            audit('USER_UPDATED', "USER_$id", implode(', ', array_diff(array_keys($b), ['password'])) ?: 'password');
+            ok();
+        }
+        if ($method === 'DELETE') {
+            if ($id === $a['id']) {
+                fail(422, "You can't delete your own account.");
+            }
+            q('DELETE FROM admin_users WHERE id = ?', [$id]);
+            audit('USER_DELETED', "USER_$id");
+            ok();
+        }
+    }
+
+    if ($route === '/admin/export' && $method === 'GET') {
+        $a = require_role('admin');
+        $scope = ($_GET['scope'] ?? '') === 'all' ? 'all' : 'content';
+        if ($scope === 'all' && $a['role'] !== 'owner') {
+            fail(403, 'Only owners can export customer data.');
+        }
+        $collections = [];
+        foreach (COLLECTIONS as $name) {
+            $collections[$name] = all_entries($name);
+        }
+        $payload = ['exportedAt' => gmdate('c'), 'scope' => $scope, 'settings' => ['site' => site_settings(), 'advanced' => advanced_settings()], 'collections' => $collections];
+        if ($scope === 'all') {
+            $payload['enquiries'] = all_rows('SELECT ' . LEAD_COLUMNS . ' FROM enquiries');
+            $payload['bookings'] = all_rows('SELECT ' . BOOKING_COLUMNS . ' FROM bookings');
+            $payload['subscribers'] = all_rows('SELECT email, source, created_at FROM subscribers');
+        }
+        audit('EXPORT', 'EXPORT_' . strtoupper($scope));
+        header('Content-Disposition: attachment; filename="novaframe-' . $scope . '-' . gmdate('Y-m-d') . '.json"');
+        ok($payload);
+    }
 }

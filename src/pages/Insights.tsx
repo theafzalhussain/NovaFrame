@@ -1,55 +1,53 @@
 import { useMemo, useState } from "react";
+import { Icon } from "../components/Icons";
+import { Button, PageHero, Reveal } from "../components/ui";
+import type { Insight } from "../data/types";
+import { useContent } from "../lib/content";
 import { Link } from "../lib/router";
-import { insights, type Insight } from "../data/content-extra";
-import { company } from "../data/content";
-import {
-  Eyebrow,
-  GhostButton,
-  Glow,
-  PageHero,
-  PrimaryButton,
-  Reveal,
-  SectionHeading,
-} from "../components/ui";
+import { prettyDate } from "../lib/site";
 import { cn } from "../utils/cn";
 
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-const cats = ["All", "Engineering", "Design", "Growth", "Studio"] as const;
+function Meta({ article, className }: { article: Insight; className?: string }) {
+  return (
+    <p className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] tracking-wide text-smoke", className)}>
+      <span className="text-gold-400">{article.category}</span>
+      <span className="h-1 w-1 rotate-45 bg-gold-500/60" />
+      <span>{prettyDate(article.date)}</span>
+      <span className="h-1 w-1 rotate-45 bg-gold-500/60" />
+      <span>{article.readTime}</span>
+    </p>
+  );
+}
 
 export function InsightsPage() {
-  const [cat, setCat] = useState<string>("All");
-  const list = useMemo(
-    () => (cat === "All" ? insights : insights.filter((i) => i.category === cat)),
-    [cat],
-  );
-  const [featured, ...rest] = list;
+  const { collections } = useContent();
+  const articles = useMemo(() => [...collections.insights].sort((a, b) => b.date.localeCompare(a.date)), [collections.insights]);
+  const [category, setCategory] = useState("All");
+  const categories = ["All", ...Array.from(new Set(articles.map((a) => a.category)))];
+  const visible = category === "All" ? articles : articles.filter((a) => a.category === category);
+  const [lead, ...rest] = visible;
 
   return (
     <>
       <PageHero
         eyebrow="Insights"
-        title="Notes from inside"
-        highlight="the studio."
-        description="Engineering decisions, design process and growth experiments — documented so clients and peers can see how we actually think, not just what we ship."
-      >
-        <PrimaryButton to="/contact">Discuss your project</PrimaryButton>
-      </PageHero>
+        title="Engineering notes from"
+        highlight="real, shipped products."
+        description="How we solve the hard parts — caching, resilience, performance and product decisions — written up from the projects you can open on our work page."
+      />
 
-      <section className="py-14 md:py-20">
+      <section className="pb-28">
         <div className="shell">
           <div className="flex flex-wrap gap-2">
-            {cats.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c}
                 type="button"
-                onClick={() => setCat(c)}
+                onClick={() => setCategory(c)}
+                aria-pressed={category === c}
                 className={cn(
-                  "rounded-full border px-4 py-2 text-[13px] font-medium transition",
-                  cat === c
-                    ? "border-brand-400/60 bg-brand-500/20 text-white"
-                    : "border-white/10 bg-white/[0.03] text-slate-400 hover:text-white",
+                  "rounded-full border px-4 py-2 text-[13px] font-semibold transition",
+                  category === c ? "border-gold-300/60 bg-gold-400/15 text-gold-100" : "border-gold-300/12 text-mist hover:text-ivory",
                 )}
               >
                 {c}
@@ -57,93 +55,44 @@ export function InsightsPage() {
             ))}
           </div>
 
-          {featured ? (
-            <Reveal>
-              <Link to={`/insights/${featured.slug}`} className="group mt-10 block">
-                <article className="glass glass-hover grad-border grid overflow-hidden rounded-[28px] lg:grid-cols-[1.1fr_0.9fr]">
-                  <div className="p-7 md:p-10">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Eyebrow>{featured.category}</Eyebrow>
-                      <span className="font-mono text-[11px] text-slate-500">{fmt(featured.date)}</span>
-                      <span className="font-mono text-[11px] text-slate-600">· {featured.readTime}</span>
-                    </div>
-                    <h2 className="font-display mt-5 text-2xl leading-tight font-extrabold tracking-[-0.02em] text-white transition group-hover:text-brand-200 md:text-[2rem]">
-                      {featured.title}
-                    </h2>
-                    <p className="mt-4 text-[15px] leading-relaxed text-slate-400">{featured.excerpt}</p>
-                    <span className="mt-6 inline-flex items-center gap-2 text-[13px] font-semibold text-brand-300 transition-all group-hover:gap-3">
-                      Read article <span aria-hidden>→</span>
-                    </span>
+          {lead ? (
+            <Reveal className="mt-10">
+              <Link to={`/insights/${lead.id}`} className="lux-card lux-hover group grid overflow-hidden md:grid-cols-[1.1fr_0.9fr]">
+                <div className="p-8 md:p-12">
+                  <Meta article={lead} />
+                  <h2 className="display mt-6 text-[2rem] leading-tight transition-colors group-hover:text-gold-100 md:text-[2.7rem]">{lead.title}</h2>
+                  <p className="mt-5 text-[15.5px] leading-relaxed text-mist">{lead.excerpt}</p>
+                  <span className="mt-8 inline-flex items-center gap-2 text-[13.5px] font-semibold text-gold-200 transition-all group-hover:gap-3">
+                    Read the article <Icon name="arrow" className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="relative hidden overflow-hidden border-l border-gold-300/10 bg-ink-850 md:block">
+                  <div className="grid-lines absolute inset-0" aria-hidden />
+                  <div className="absolute inset-0 grid place-items-center">
+                    <span className="display serif-accent text-gold text-[9rem] leading-none opacity-80">“</span>
                   </div>
-                  <div className="relative min-h-[220px] overflow-hidden border-t border-white/8 bg-gradient-to-br from-brand-600/25 via-ink-800 to-aqua-500/15 lg:border-t-0 lg:border-l">
-                    <div className="dot-bg absolute inset-0 opacity-40" aria-hidden />
-                    <div className="relative flex h-full flex-col justify-end p-8">
-                      <span className="font-display text-[64px] leading-none font-extrabold text-white/10">
-                        {featured.category.slice(0, 2).toUpperCase()}
-                      </span>
-                      <p className="font-display mt-2 text-[13px] font-semibold text-slate-300">
-                        {featured.author}
-                      </p>
-                    </div>
-                  </div>
-                </article>
+                  <span className="label absolute bottom-6 left-6">By {lead.author}</span>
+                </div>
               </Link>
             </Reveal>
-          ) : null}
+          ) : (
+            <p className="mt-16 text-center text-mist">No articles in this category yet.</p>
+          )}
 
-          <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {rest.map((a, i) => (
-              <Reveal key={a.slug} delay={i * 80}>
-                <Link to={`/insights/${a.slug}`} className="group block h-full">
-                  <article className="glass glass-hover flex h-full flex-col rounded-3xl p-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <Eyebrow>{a.category}</Eyebrow>
-                      <span className="font-mono text-[10.5px] text-slate-500">{a.readTime}</span>
-                    </div>
-                    <h3 className="font-display mt-5 text-[17px] leading-snug font-bold text-white transition group-hover:text-brand-200">
-                      {a.title}
-                    </h3>
-                    <p className="mt-3 flex-1 text-[13.5px] leading-relaxed text-slate-400">{a.excerpt}</p>
-                    <div className="mt-5 flex items-center justify-between border-t border-white/8 pt-4 text-[11.5px] text-slate-500">
-                      <span>{a.author}</span>
-                      <span>{fmt(a.date)}</span>
-                    </div>
-                  </article>
+              <Reveal key={a.id} delay={(i % 3) * 80}>
+                <Link to={`/insights/${a.id}`} className="lux-card lux-hover group flex h-full flex-col p-7">
+                  <Meta article={a} />
+                  <h3 className="display mt-5 text-[1.45rem] leading-snug transition-colors group-hover:text-gold-100">{a.title}</h3>
+                  <p className="mt-3 line-clamp-3 text-[14px] leading-relaxed text-mist">{a.excerpt}</p>
+                  <span className="mt-auto inline-flex items-center gap-2 pt-6 text-[13px] font-semibold text-gold-200">
+                    Read <Icon name="arrow" className="h-3.5 w-3.5" />
+                  </span>
                 </Link>
               </Reveal>
             ))}
           </div>
-
-          {list.length === 0 ? (
-            <p className="mt-16 text-center text-sm text-slate-500">
-              No articles in this category yet. Try another filter.
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="border-t border-white/8 bg-ink-900/40 py-20">
-        <div className="shell">
-          <Reveal>
-            <div className="grad-border relative overflow-hidden rounded-[32px] bg-gradient-to-br from-brand-600/28 via-ink-800 to-aqua-500/16 p-8 text-center md:p-12">
-              <div className="grid-bg absolute inset-0 opacity-50" aria-hidden />
-              <Glow className="-bottom-20 left-1/2 h-64 w-96 -translate-x-1/2" color="rgba(34,211,238,0.2)" />
-              <div className="relative mx-auto max-w-xl">
-                <Eyebrow>Work with us</Eyebrow>
-                <h2 className="font-display mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-                  Prefer we just build it for you?
-                </h2>
-                <p className="mt-4 text-[15px] leading-relaxed text-slate-300">
-                  Send a short brief and you will get a written proposal with scope and a fixed quote
-                  within {company.responseTime.toLowerCase()}.
-                </p>
-                <div className="mt-7 flex flex-wrap justify-center gap-3">
-                  <PrimaryButton to="/contact">Start a project</PrimaryButton>
-                  <GhostButton to="/work">See our results</GhostButton>
-                </div>
-              </div>
-            </div>
-          </Reveal>
         </div>
       </section>
     </>
@@ -151,113 +100,81 @@ export function InsightsPage() {
 }
 
 export function InsightArticle({ article }: { article: Insight }) {
-  const others = insights.filter((i) => i.slug !== article.slug).slice(0, 2);
+  const { collections } = useContent();
+  const founder = collections.team.find((t) => t.name === article.author) ?? collections.team[0];
+  const related = collections.insights.filter((a) => a.id !== article.id).slice(0, 2);
 
   return (
-    <>
-      <section className="relative overflow-hidden pt-32 pb-12 md:pt-40">
-        <div className="grid-bg absolute inset-0" aria-hidden />
-        <Glow className="-top-24 left-1/2 h-[340px] w-[500px] -translate-x-1/2" color="rgba(79,70,229,0.22)" />
-        <div className="shell relative">
-          <Link
-            to="/insights"
-            className="inline-flex items-center gap-2 text-[13px] font-medium text-slate-400 transition hover:text-white"
-          >
-            <span aria-hidden>←</span> All insights
+    <article>
+      <header className="relative overflow-hidden pt-40 pb-14 md:pt-48">
+        <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
+        <div className="shell relative max-w-4xl">
+          <Link to="/insights" className="inline-flex items-center gap-2 text-[13px] font-semibold text-mist transition hover:text-gold-200">
+            <Icon name="arrow-left" className="h-3.5 w-3.5" /> All insights
           </Link>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Eyebrow>{article.category}</Eyebrow>
-            <span className="font-mono text-[11.5px] text-slate-500">{fmt(article.date)}</span>
-            <span className="font-mono text-[11.5px] text-slate-600">· {article.readTime}</span>
-          </div>
-          <h1 className="font-display mt-5 max-w-4xl text-[2.1rem] leading-[1.08] font-extrabold tracking-[-0.03em] text-white sm:text-[2.9rem] md:text-[3.2rem]">
-            {article.title}
-          </h1>
-          <p className="mt-5 max-w-2xl text-[16px] leading-relaxed text-slate-400 md:text-[17px]">
-            {article.excerpt}
-          </p>
-          <div className="mt-7 flex items-center gap-3">
-            <span className="font-display grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-aqua-500 text-[12px] font-bold text-white">
-              {article.author
-                .split(" ")
-                .map((n) => n[0])
-                .join("")}
-            </span>
+          <Meta article={article} className="mt-10" />
+          <h1 className="display mt-6 text-[2.5rem] leading-[1.06] md:text-[3.9rem]">{article.title}</h1>
+          <p className="mt-6 text-[18px] leading-relaxed text-sand">{article.excerpt}</p>
+          <div className="mt-9 flex items-center gap-3.5 border-t border-gold-300/10 pt-6">
+            {founder?.photo ? (
+              <img src={founder.photo} alt="" className="h-11 w-11 rounded-full border border-gold-300/30 object-cover object-top" />
+            ) : null}
             <div>
-              <p className="text-[13px] font-semibold text-white">{article.author}</p>
-              <p className="text-[11.5px] text-slate-500">{company.name}</p>
+              <p className="text-[14px] font-semibold text-ivory">{article.author}</p>
+              <p className="text-[12.5px] text-mist">{founder?.role}</p>
             </div>
           </div>
         </div>
-      </section>
+      </header>
 
-      <article className="border-y border-white/8 bg-ink-900/30 py-16 md:py-20">
-        <div className="shell max-w-3xl">
+      <div className="shell max-w-3xl pb-20">
+        <div className="prose-lux">
           {article.body.map((block, i) => (
-            <Reveal key={i} delay={i * 40}>
-              <div className="mb-9">
-                {block.heading ? (
-                  <h2 className="font-display mb-4 text-xl font-bold tracking-tight text-white md:text-2xl">
-                    {block.heading}
-                  </h2>
-                ) : null}
-                {block.paragraphs.map((p, k) => (
-                  <p key={k} className="mb-4 text-[16px] leading-[1.75] text-slate-300">
-                    {p}
-                  </p>
-                ))}
-                {block.list ? (
-                  <ul className="mt-5 space-y-3 rounded-2xl border border-white/8 bg-white/[0.03] p-6">
-                    {block.list.map((li) => (
-                      <li key={li} className="flex items-start gap-3 text-[15px] leading-relaxed text-slate-300">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-aqua-400" />
-                        {li}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </Reveal>
+            <section key={i}>
+              {block.heading ? <h2>{block.heading}</h2> : null}
+              {block.paragraphs.map((p, j) => (
+                <p key={j}>{p}</p>
+              ))}
+              {block.list?.length ? (
+                <ul>
+                  {block.list.map((li) => (
+                    <li key={li}>{li}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
           ))}
+        </div>
 
-          <div className="grad-border mt-12 rounded-3xl bg-gradient-to-br from-brand-600/25 to-aqua-500/12 p-7 text-center">
-            <h3 className="font-display text-xl font-bold text-white">
-              Want this applied to your product?
-            </h3>
-            <p className="mx-auto mt-3 max-w-md text-[14px] leading-relaxed text-slate-300">
-              We take on a limited number of projects each quarter. Tell us what you are building and we
-              will tell you what is realistic.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <PrimaryButton to="/contact">Start a project</PrimaryButton>
-              <GhostButton to="/pricing">See pricing</GhostButton>
+        <div className="lux-card gold-edge mt-16 p-8 md:p-10">
+          <p className="eyebrow">Work with us</p>
+          <h2 className="display mt-5 text-[1.9rem] leading-tight">
+            Want this level of engineering <span className="serif-accent text-gold">in your product?</span>
+          </h2>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Button to="/book" arrow track={`insight_${article.id}_book`}>
+              Book a free call
+            </Button>
+            <Button to="/work" variant="line">
+              See the products
+            </Button>
+          </div>
+        </div>
+
+        {related.length ? (
+          <div className="mt-16">
+            <p className="label">Keep reading</p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              {related.map((a) => (
+                <Link key={a.id} to={`/insights/${a.id}`} className="lux-card lux-hover group p-6">
+                  <Meta article={a} />
+                  <p className="display mt-4 text-[1.2rem] leading-snug group-hover:text-gold-100">{a.title}</p>
+                </Link>
+              ))}
             </div>
           </div>
-        </div>
-      </article>
-
-      <section className="py-16">
-        <div className="shell">
-          <Reveal>
-            <SectionHeading align="left" eyebrow="Keep reading" title="More from" highlight="the studio." />
-          </Reveal>
-          <div className="mt-10 grid gap-5 md:grid-cols-2">
-            {others.map((a, i) => (
-              <Reveal key={a.slug} delay={i * 80}>
-                <Link to={`/insights/${a.slug}`} className="group block h-full">
-                  <article className="glass glass-hover h-full rounded-3xl p-6">
-                    <Eyebrow>{a.category}</Eyebrow>
-                    <h3 className="font-display mt-4 text-[17px] leading-snug font-bold text-white transition group-hover:text-brand-200">
-                      {a.title}
-                    </h3>
-                    <p className="mt-2.5 text-[13.5px] leading-relaxed text-slate-400">{a.excerpt}</p>
-                  </article>
-                </Link>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
+        ) : null}
+      </div>
+    </article>
   );
 }

@@ -1,240 +1,133 @@
 import { Icon } from "../components/Icons";
-import Faq from "../components/Faq";
-import {
-  Eyebrow,
-  GhostButton,
-  Glow,
-  PageHero,
-  PrimaryButton,
-  Reveal,
-  SectionHeading,
-} from "../components/ui";
-import { credentials, faqs, packages, services } from "../data/content";
-
-const included = [
-  "Responsive across every breakpoint (320px → ultrawide)",
-  "Technical SEO: schema, sitemap, metadata, Core Web Vitals",
-  "TypeScript codebase with a clean git history any developer can inherit",
-  "Analytics and error monitoring wired before launch",
-  "Documentation plus a recorded walkthrough of your admin",
-  "30 days of post-launch bug support",
-];
+import { Button, IconTile, PageHero, Reveal, SectionHeading } from "../components/ui";
+import { useContent } from "../lib/content";
+import { Link } from "../lib/router";
+import { cn } from "../utils/cn";
 
 export default function Services() {
+  const { collections } = useContent();
+  const services = collections.services;
+
   return (
     <>
       <PageHero
-        eyebrow="Capabilities"
-        title="Everything required to"
-        highlight="launch and then grow."
-        description="Five capability verticals delivered by one team. Each is complete on its own, but together they compound into a consistent brand experience across every touchpoint."
+        eyebrow="Services"
+        title="Everything your business needs online —"
+        highlight="under one roof."
+        description="Websites, web apps, backends, apps, design, SEO and video — scoped in writing, priced per milestone and delivered by the person you speak to."
+        aside={
+          <div className="lux-card p-6">
+            <p className="label">Jump to</p>
+            <ul className="mt-4 space-y-1">
+              {services.map((s, i) => (
+                <li key={s.id}>
+                  <a
+                    href={`#svc-${s.id}`}
+                    className="group flex items-center gap-3 rounded-xl px-2 py-2 text-[14px] text-sand transition hover:bg-gold-300/[0.05] hover:text-ivory"
+                  >
+                    <span className="font-mono text-[10.5px] text-gold-500">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="flex-1">{s.title}</span>
+                    <Icon name="arrow-down" className="h-3.5 w-3.5 text-smoke transition group-hover:text-gold-300" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
       >
-        <PrimaryButton to="/contact">Get a fixed quote</PrimaryButton>
-        <GhostButton to="/portfolio">See it in production</GhostButton>
+        <Button to="/book" arrow track="services_book">
+          Book a free call
+        </Button>
+        <Button to="/pricing" variant="line">
+          See pricing
+        </Button>
       </PageHero>
 
-      {/* quick jump */}
-      <div className="sticky top-[74px] z-30 border-b border-white/8 bg-ink-950/88 backdrop-blur-xl">
-        <div className="shell flex gap-2 overflow-x-auto py-3">
-          {services.map((s) => (
-            <a
-              key={s.id}
-              href={`#${s.id}`}
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-[13px] font-medium whitespace-nowrap text-slate-300 transition hover:border-brand-400/50 hover:text-white"
-            >
-              <Icon name={s.icon} className="h-3.5 w-3.5 text-brand-300" />
-              {s.title}
-            </a>
-          ))}
-        </div>
-      </div>
-
-      <div className="shell space-y-6 py-16 md:py-20">
-        {services.map((s, index) => (
-          <section
-            key={s.id}
-            id={s.id}
-            className="grad-border scroll-mt-36 overflow-hidden rounded-[32px] border border-white/8 bg-white/[0.02]"
-          >
-            <div className="grid lg:grid-cols-[0.85fr_1.15fr]">
-              <div
-                className={`relative border-b border-white/8 p-7 md:p-9 lg:border-r lg:border-b-0 ${
-                  index % 2 === 1
-                    ? "bg-gradient-to-br from-brand-600/12 to-transparent"
-                    : "bg-gradient-to-br from-aqua-500/10 to-transparent"
-                }`}
-              >
-                <Glow className="-top-16 -left-16 h-52 w-52" color="rgba(99,102,241,0.2)" />
-                <div className="relative">
-                  <span className="grid h-14 w-14 place-items-center rounded-2xl border border-white/12 bg-white/5 text-brand-300">
-                    <Icon name={s.icon} className="h-6 w-6" />
-                  </span>
-                  <h2 className="font-display mt-6 text-2xl font-extrabold tracking-[-0.02em] text-white md:text-3xl">
-                    {s.title}
-                  </h2>
-                  <p className="mt-2 text-sm font-semibold text-brand-300">{s.tagline}</p>
-                  <p className="mt-4 text-[14px] leading-relaxed text-slate-400">{s.short}</p>
-
-                  <div className="mt-7 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-                    <p className="font-mono text-[9.5px] tracking-[0.2em] text-slate-500 uppercase">
-                      you receive
-                    </p>
-                    <p className="mt-1.5 text-[13px] font-medium text-slate-200">{s.deliverable}</p>
-                  </div>
-
-                  <p className="mt-6 font-mono text-[9.5px] tracking-[0.2em] text-slate-500 uppercase">
-                    tools we use
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {s.stack.map((t) => (
-                      <span
-                        key={t}
-                        className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[10.5px] text-slate-300"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-
-                  <PrimaryButton to="/contact" className="mt-7">
-                    Discuss this capability
-                  </PrimaryButton>
-                </div>
-              </div>
-
-              <div className="grid gap-px bg-white/[0.06] sm:grid-cols-2">
-                {s.items.map((item) => (
-                  <div
-                    key={item.title}
-                    className="group bg-ink-950/60 p-6 transition hover:bg-white/[0.04]"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border border-brand-400/40 bg-brand-500/15 text-brand-300">
-                        <Icon name="check" className="h-3 w-3" />
-                      </span>
+      <section className="pb-20">
+        <div className="shell space-y-6">
+          {services.map((s, i) => (
+            <Reveal key={s.id}>
+              <article id={`svc-${s.id}`} className="lux-card scroll-mt-32 overflow-hidden">
+                <div className="grid lg:grid-cols-[0.95fr_1.05fr]">
+                  <div className={cn("relative flex flex-col p-8 md:p-12", i % 2 === 1 && "lg:order-2")}>
+                    <div className="flex items-center justify-between">
+                      <IconTile name={s.icon} size="lg" />
+                      <span className="display serif-accent text-[3.4rem] leading-none text-gold-300/20">{String(i + 1).padStart(2, "0")}</span>
+                    </div>
+                    <h2 className="display mt-8 text-[2.3rem] leading-tight md:text-[2.8rem]">{s.title}</h2>
+                    <p className="mt-2 text-[15px] font-medium text-gold-300/85">{s.tagline}</p>
+                    <p className="mt-5 text-[15.5px] leading-relaxed text-mist">{s.short}</p>
+                    <dl className="mt-8 grid grid-cols-3 gap-4 border-y border-gold-300/10 py-6">
                       <div>
-                        <h3 className="font-display text-[15px] font-bold text-white">{item.title}</h3>
-                        <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400">{item.desc}</p>
+                        <dt className="label">From</dt>
+                        <dd className="display mt-2 text-[1.35rem] text-gold">{s.startingAt}</dd>
+                      </div>
+                      <div>
+                        <dt className="label">Timeline</dt>
+                        <dd className="mt-2 text-[14px] font-semibold text-parchment">{s.timeline}</dd>
+                      </div>
+                      <div>
+                        <dt className="label">You get</dt>
+                        <dd className="mt-2 text-[12.5px] leading-snug text-sand">{s.deliverable}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-8 flex flex-wrap gap-3">
+                      <Button to={`/services/${s.id}`} arrow size="sm">
+                        Explore {s.title}
+                      </Button>
+                      <Button to={`/contact?service=${encodeURIComponent(s.title)}`} variant="line" size="sm" track={`services_start_${s.id}`}>
+                        Start this project
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className={cn("border-gold-300/10 bg-ink-950/40 p-8 md:p-12", i % 2 === 1 ? "lg:border-r" : "lg:border-l")}>
+                    <p className="label">What's included</p>
+                    <ul className="mt-6 grid gap-x-8 gap-y-6 sm:grid-cols-2">
+                      {s.items.map((it) => (
+                        <li key={it.title} className="flex gap-3">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rotate-45 bg-gold-400" />
+                          <span>
+                            <span className="block text-[14.5px] font-semibold text-ivory">{it.title}</span>
+                            <span className="mt-1 block text-[13px] leading-relaxed text-mist">{it.desc}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-9 border-t border-gold-300/10 pt-6">
+                      <p className="label">Core stack</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {s.stack.map((t) => (
+                          <span key={t} className="chip">
+                            {t}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </div>
-                ))}
+                </div>
+              </article>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      <section className="py-24">
+        <div className="shell">
+          <Reveal>
+            <div className="lux-card gold-edge relative overflow-hidden p-10 text-center md:p-16">
+              <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
+              <div className="relative">
+                <SectionHeading eyebrow="Not sure where to start?" title="Tell us the goal —" highlight="we'll recommend the scope." />
+                <div className="mt-10 flex flex-wrap justify-center gap-3.5">
+                  <Button to="/book" arrow track="services_bottom_book">
+                    Book a 30-min call
+                  </Button>
+                  <Link to="/pricing" className="btn btn-line">
+                    Estimate the cost
+                  </Link>
+                </div>
               </div>
-            </div>
-          </section>
-        ))}
-      </div>
-
-      {/* Included */}
-      <section className="border-y border-white/8 bg-ink-900/40 py-20 md:py-24">
-        <div className="shell">
-          <Reveal>
-            <SectionHeading
-              eyebrow="No hidden extras"
-              title="This is already included"
-              highlight="in every project."
-              description="You will never receive a separate invoice for the items below — they are our baseline quality standard, not upsells."
-            />
-          </Reveal>
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {included.map((item, i) => (
-              <Reveal key={item} delay={i * 60}>
-                <div className="glass glass-hover flex h-full items-start gap-3 rounded-2xl p-5">
-                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-aqua-500 text-white">
-                    <Icon name="check" className="h-3 w-3" />
-                  </span>
-                  <p className="text-[13.5px] leading-relaxed text-slate-300">{item}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Packages */}
-      <section className="py-20 md:py-28">
-        <div className="shell">
-          <Reveal>
-            <SectionHeading
-              eyebrow="Engagement models"
-              title="Transparent packages,"
-              highlight="no surprise invoices."
-              description="Published starting points so you can align budget before the first call. The final quote arrives as a written proposal after discovery."
-            />
-          </Reveal>
-          <div className="mt-14 grid gap-5 lg:grid-cols-3">
-            {packages.map((p, i) => (
-              <Reveal key={p.name} delay={i * 90}>
-                <div
-                  className={`relative flex h-full flex-col rounded-3xl p-7 ${
-                    p.best
-                      ? "grad-border bg-gradient-to-b from-brand-600/25 to-ink-800 ring-glow"
-                      : "glass"
-                  }`}
-                >
-                  {p.best ? (
-                    <span className="absolute -top-3 left-7 rounded-full bg-gradient-to-r from-brand-500 to-aqua-500 px-3 py-1 font-mono text-[9.5px] tracking-[0.18em] text-white uppercase">
-                      Most chosen
-                    </span>
-                  ) : null}
-                  <h3 className="font-display text-lg font-bold text-white">{p.name}</h3>
-                  <p className="mt-2 text-[13px] leading-relaxed text-slate-400">{p.desc}</p>
-                  <div className="mt-6 flex items-end gap-2">
-                    <span className="font-display text-3xl font-extrabold tracking-tight text-white">
-                      {p.price}
-                    </span>
-                    <span className="pb-1 text-[11px] text-slate-500">{p.suffix}</span>
-                  </div>
-                  <p className="mt-1 text-[11.5px] text-slate-500">{p.usd}</p>
-                  <ul className="mt-6 flex-1 space-y-2.5 border-t border-white/8 pt-6">
-                    {p.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2.5 text-[13px] text-slate-300">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-aqua-400" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <PrimaryButton to="/contact" className="mt-7 w-full">
-                    {p.best ? "Start with Growth" : `Choose ${p.name}`}
-                  </PrimaryButton>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-
-          <Reveal delay={160}>
-            <div className="glass mt-8 grid gap-px overflow-hidden rounded-3xl bg-white/[0.06] sm:grid-cols-2 lg:grid-cols-3">
-              {credentials.slice(0, 3).map((c) => (
-                <div key={c.title} className="bg-ink-950/70 p-5">
-                  <p className="font-display text-[13.5px] font-bold text-white">{c.title}</p>
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">{c.desc}</p>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      <section className="border-t border-white/8 bg-ink-900/40 py-20 md:py-24">
-        <div className="shell">
-          <Reveal>
-            <SectionHeading
-              eyebrow="Scope & pricing FAQ"
-              title="Clarity before"
-              highlight="any commitment."
-            />
-          </Reveal>
-          <Reveal delay={100} className="mt-10">
-            <Faq items={faqs.slice(1, 4)} />
-          </Reveal>
-          <Reveal delay={180}>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <Eyebrow>Ready when you are</Eyebrow>
-              <PrimaryButton to="/contact">Request a proposal</PrimaryButton>
             </div>
           </Reveal>
         </div>

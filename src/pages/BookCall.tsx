@@ -1,321 +1,340 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BrandMark } from "../components/Brand";
 import { Icon } from "../components/Icons";
-import { Eyebrow, PrimaryButton, Glow } from "../components/ui";
-import { submitEnquiry } from "../lib/api";
-import { company } from "../data/content";
+import { StudioStatusPill } from "../components/StudioStatus";
+import { Button, Eyebrow, Reveal } from "../components/ui";
+import { api, track } from "../lib/api";
+import { useContent } from "../lib/content";
+import { upcomingWorkdays, whatsappLink } from "../lib/site";
+import { downloadIcs, googleCalendarUrl, zonedToUtc } from "../lib/time";
+import { cn } from "../utils/cn";
 
-const TIME_SLOTS = [
-  "10:30 AM",
-  "11:45 AM",
-  "02:00 PM",
-  "03:30 PM",
-  "05:00 PM",
-  "06:15 PM",
-];
-
-function getUpcomingDays() {
-  const days: { label: string; dateStr: string; dayName: string }[] = [];
-  const now = new Date();
-  for (let i = 1; days.length < 5; i++) {
-    const d = new Date(now);
-    d.setDate(now.getDate() + i);
-    if (d.getDay() !== 0) {
-      days.push({
-        label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        dateStr: d.toISOString().split("T")[0],
-        dayName: d.toLocaleDateString("en-US", { weekday: "short" }),
-      });
-    }
-  }
-  return days;
-}
+type Confirmed = { reference: string; date: string; time: string; offline: boolean };
 
 export default function BookCallPage() {
-  const days = getUpcomingDays();
-  const [selectedDay, setSelectedDay] = useState(days[0].dateStr);
-  const [selectedTime, setSelectedTime] = useState(TIME_SLOTS[0]);
+  const { settings, advanced, collections } = useContent();
+  const founder = collections.team[0];
+  const days = useMemo(() => upcomingWorkdays(settings, Math.min(Math.max(settings.booking.daysAhead, 3), 12)), [settings]);
+  const slots = settings.booking.slots;
+  const minutes = settings.booking.durationMinutes;
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [topic, setTopic] = useState("New Web / App Build");
-  const [budget, setBudget] = useState("₹1,00,000 – ₹3,00,000");
-  const [notes, setNotes] = useState("");
+  const [day, setDay] = useState(days[0]?.key ?? "");
+  const [time, setTime] = useState("");
+  const [taken, setTaken] = useState<Record<string, string[]>>({});
+  const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", topic: advanced.bookingTopics[0] ?? "", budget: "", notes: "", website: "" });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState<Confirmed | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [reference, setReference] = useState("");
-  const [error, setError] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim()) {
-      setError("Please provide your name and work email.");
-      return;
-    }
-    setError("");
-    setLoading(true);
-
-    const details = `[DISCOVERY CALL SCHEDULED]\nDate: ${selectedDay}\nTime: ${selectedTime} IST\nTopic: ${topic}\nCompany: ${companyName || "N/A"}\nNotes: ${notes || "None"}`;
-
+  const visitorTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // Compare real offsets, not names ("Asia/Calcutta" and "Asia/Kolkata" are the same zone).
+  const sameTz = useMemo(() => {
+    if (visitorTz === settings.timezone) return true;
     try {
-      const res = await submitEnquiry({
-        name,
-        companyName,
-        email,
-        phone,
-        service: `Call: ${topic}`,
-        budget,
-        timeline: "Immediate Kickoff",
-        details,
-      });
-
-      setLoading(false);
-      setReference(res.data?.reference || "NF-" + Math.random().toString(36).substring(2, 8).toUpperCase());
-      setConfirmed(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const now = new Date();
+      const fmt = (timeZone: string) => now.toLocaleString("en-US", { timeZone, hour12: false });
+      return fmt(visitorTz) === fmt(settings.timezone);
     } catch {
-      setLoading(false);
-      setReference("NF-" + Math.random().toString(36).substring(2, 8).toUpperCase());
-      setConfirmed(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
     }
+  }, [visitorTz, settings.timezone]);
+
+  const loadAvailability = useCallback(async () => {
+    if (!days.length) return;
+    const res = await api.availability(days[0].key, days[days.length - 1].key);
+    if (res.ok && res.data) setTaken(res.data.taken ?? {});
+  }, [days]);
+
+  useEffect(() => {
+    void loadAvailability();
+  }, [loadAvailability]);
+
+  const takenToday = taken[day] ?? [];
+  useEffect(() => {
+    if (time && takenToday.includes(time)) setTime("");
+  }, [takenToday, time]);
+
+  const set = (k: keyof typeof form, v: string) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    setErrors((e) => ({ ...e, [k]: "" }));
   };
 
-  return (
-    <div className="relative min-h-screen pt-32 pb-24 overflow-hidden">
-      <div className="grid-bg absolute inset-0 pointer-events-none" aria-hidden />
-      <Glow className="-top-32 left-1/2 h-[450px] w-[650px] -translate-x-1/2" />
-      <Glow className="top-1/3 -right-24 h-80 w-80" color="rgba(6,182,212,0.2)" />
+  const localLabel = (d: string, t: string) => {
+    if (sameTz || !d || !t) return "";
+    const instant = zonedToUtc(d, t, settings.timezone);
+    return instant.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  };
 
-      <div className="shell relative">
-        <div className="max-w-3xl mx-auto text-center mb-12">
-          <Eyebrow tone="brand">Direct Calendar Reservation</Eyebrow>
-          <h1 className="font-display mt-4 text-3xl sm:text-5xl font-extrabold tracking-tight text-white">
-            Schedule a 30-Minute <span className="text-gradient">Discovery Session</span>
-          </h1>
-          <p className="mt-4 text-base sm:text-lg text-slate-300 max-w-xl mx-auto leading-relaxed">
-            Discuss your architecture, technical feasibility, budget alignment, and delivery milestones directly with our Lead Architect.
-          </p>
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const next: Record<string, string> = {};
+    if (!day) next.date = "Pick a day.";
+    if (!time) next.time = "Pick a time.";
+    if (form.name.trim().length < 2) next.name = "Please enter your name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) next.email = "Please enter a valid email.";
+    setErrors(next);
+    if (Object.keys(next).length || busy) return;
+    setBusy(true);
+    const res = await api.book({ ...form, date: day, time });
+    setBusy(false);
+    if (!res.ok) {
+      if (res.status === 409) {
+        setErrors({ time: res.error ?? "That slot was just taken." });
+        setTime("");
+        void loadAvailability();
+      } else {
+        setErrors(res.errors ?? { form: res.error ?? "Couldn't reserve the slot. Please try WhatsApp." });
+      }
+      return;
+    }
+    track("call_booked", { topic: form.topic });
+    setConfirmed({ reference: res.data?.reference ?? "", date: day, time, offline: Boolean(res.offline) });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const dayInfo = days.find((d) => d.key === (confirmed?.date ?? day));
+  const prettyDay = dayInfo ? `${dayInfo.day}, ${dayInfo.month} ${dayInfo.date}` : confirmed?.date ?? "";
+
+  if (confirmed) {
+    const start = zonedToUtc(confirmed.date, confirmed.time, settings.timezone);
+    const title = `${settings.short} × ${form.name.split(" ")[0]} — discovery call`;
+    const details = `Topic: ${form.topic}\nReference: ${confirmed.reference}\nMeeting link will be shared by email/WhatsApp before the call.\nQuestions: ${settings.email}`;
+    const waMessage = `Hi ${settings.short}! I just booked a call for ${prettyDay} at ${confirmed.time} ${settings.timezoneLabel} (ref ${confirmed.reference}). Topic: ${form.topic}.`;
+    return (
+      <section className="relative pt-40 pb-28 md:pt-48">
+        <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
+        <div className="shell relative max-w-2xl">
+          <Reveal>
+            <div className="lux-card gold-orbit p-8 text-center md:p-12">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-b from-gold-200 to-gold-500 text-ink-950 shadow-[0_14px_40px_-12px_rgba(212,173,102,0.9)]">
+                <Icon name="calendar" className="h-7 w-7" />
+              </div>
+              <Eyebrow center className="mt-8">
+                Call reserved
+              </Eyebrow>
+              <h1 className="display mt-5 text-[2.4rem] leading-tight">
+                See you soon, <span className="serif-accent text-gold">{form.name.split(" ")[0]}.</span>
+              </h1>
+              <p className="mt-4 text-[15.5px] text-sand">
+                {prettyDay} · <span className="font-semibold text-gold-100">{confirmed.time} {settings.timezoneLabel}</span> · {minutes} minutes
+                {localLabel(confirmed.date, confirmed.time) ? <span className="block text-[13px] text-mist">That's {localLabel(confirmed.date, confirmed.time)} your time</span> : null}
+              </p>
+              {confirmed.offline ? (
+                <div className="mx-auto mt-6 rounded-2xl border border-ember/40 bg-ember/10 p-4 text-left text-[13.5px] text-parchment">
+                  Our server didn't respond, so please confirm this slot on WhatsApp — it takes one tap.
+                </div>
+              ) : null}
+              <p className="mx-auto mt-6 max-w-md text-[14px] leading-relaxed text-mist">
+                A {settings.booking.meetingTool} link will reach <span className="text-parchment">{form.email}</span> before the call. Reference{" "}
+                <span className="font-mono text-gold-200">{confirmed.reference}</span>.
+              </p>
+              <div className="mt-8 flex flex-wrap justify-center gap-3">
+                <a href={googleCalendarUrl({ title, start, minutes, details })} target="_blank" rel="noopener noreferrer" className="btn btn-gold btn-sm shine">
+                  <Icon name="calendar" className="h-4 w-4" /> Add to Google Calendar
+                </a>
+                <button type="button" onClick={() => downloadIcs({ title, start, minutes, details, uid: confirmed.reference || String(Date.now()) })} className="btn btn-line btn-sm">
+                  <Icon name="download" className="h-4 w-4" /> Download .ics
+                </button>
+                <a href={whatsappLink(settings, waMessage)} target="_blank" rel="noopener noreferrer" className="btn btn-line btn-sm">
+                  <Icon name="whatsapp" className="h-4 w-4" /> Confirm on WhatsApp
+                </a>
+              </div>
+              <div className="hairline my-9" />
+              <Button to="/work" variant="ghost" arrow>
+                Browse our work before the call
+              </Button>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="relative overflow-hidden pt-40 pb-28 md:pt-48">
+      <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
+      <div className="shell relative grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
+        <div>
+          <Reveal>
+            <Eyebrow>Free strategy call</Eyebrow>
+            <h1 className="display mt-7 text-[2.7rem] leading-[1.02] sm:text-6xl">
+              {minutes} minutes that <span className="serif-accent text-gold">save you months.</span>
+            </h1>
+            <p className="mt-6 text-[16.5px] leading-relaxed text-sand">
+              Talk scope, stack, budget and timeline directly with the founder. You'll leave with honest answers — whether or not we end up working together.
+            </p>
+          </Reveal>
+          <Reveal delay={100}>
+            <ul className="mt-9 space-y-4">
+              {[
+                ["target", "Clarify the goal", "What success looks like, for whom, by when."],
+                ["layers", "Map the right scope", "What to build first — and what to leave out."],
+                ["rupee", "Budget & timeline", "A realistic range before any proposal."],
+                ["shield", "No obligation", "No sales script, no pressure, NDA on request."],
+              ].map(([icon, t, d]) => (
+                <li key={t} className="flex gap-4">
+                  <span className="icon-tile h-10 w-10 rounded-xl">
+                    <Icon name={icon} className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block text-[15px] font-semibold text-ivory">{t}</span>
+                    <span className="block text-[13.5px] text-mist">{d}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+          {founder ? (
+            <Reveal delay={160}>
+              <div className="lux-card mt-10 flex items-center gap-4 p-5">
+                {founder.photo ? <img src={founder.photo} alt="" className="h-14 w-14 rounded-full border border-gold-300/30 object-cover object-top" /> : <BrandMark size={56} />}
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold text-ivory">You'll speak with {founder.name}</p>
+                  <p className="text-[12.5px] text-mist">{founder.role}</p>
+                </div>
+              </div>
+              <StudioStatusPill className="mt-4" />
+            </Reveal>
+          ) : null}
         </div>
 
-        <div className="max-w-2xl mx-auto">
-          {confirmed ? (
-            <div className="glass-card grad-border rounded-[32px] p-8 sm:p-12 text-center space-y-5">
-              <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-emerald-400 to-aqua-500 text-white shadow-lg">
-                <Icon name="check" className="h-8 w-8" />
-              </div>
-              <Eyebrow tone="emerald">Confirmed in Database</Eyebrow>
-              <h2 className="font-display text-3xl font-extrabold text-white">
-                You are booked, {name.split(" ")[0]}! 🎉
-              </h2>
-              <p className="text-slate-300 max-w-md mx-auto text-sm leading-relaxed">
-                Your 30-minute discovery call has been reserved for{" "}
-                <span className="text-aqua-300 font-bold">
-                  {selectedDay} at {selectedTime} IST
-                </span>
-                . An invite and meeting link have been queued for{" "}
-                <span className="text-white font-semibold">{email}</span>.
-              </p>
+        <Reveal delay={120}>
+          <form onSubmit={submit} noValidate className="lux-card gold-edge p-6 md:p-10">
+            <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden" aria-hidden="true">
+              <input tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => set("website", e.target.value)} />
+            </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 max-w-sm mx-auto text-xs text-slate-400 font-mono">
-                Booking ID: <span className="text-brand-300 font-bold">{reference}</span>
-              </div>
+            <p className="label">
+              <span className="text-gold-400">01</span> · Choose a day
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {days.map((d) => {
+                const full = (taken[d.key] ?? []).length >= slots.length;
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    aria-pressed={day === d.key}
+                    disabled={full}
+                    onClick={() => setDay(d.key)}
+                    className="choice flex-col gap-0.5 px-2 py-3 text-center"
+                  >
+                    <span className="font-mono text-[10px] tracking-[0.14em] text-smoke uppercase">{d.day}</span>
+                    <span className="display text-[1.35rem] leading-none text-ivory">{d.date}</span>
+                    <span className="text-[11px] text-mist">{d.month}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {errors.date ? <p className="mt-2 text-[12px] text-ember">{errors.date}</p> : null}
 
-              <div className="pt-4 flex justify-center gap-3">
-                <PrimaryButton to="/">Return Home</PrimaryButton>
-                <button
-                  type="button"
-                  onClick={() => setConfirmed(false)}
-                  className="px-6 py-3 rounded-full border border-white/15 bg-white/5 text-sm font-semibold text-slate-200 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                  Book Another Call
-                </button>
+            <p className="label mt-8">
+              <span className="text-gold-400">02</span> · Choose a time <span className="normal-case tracking-normal text-smoke">({settings.timezoneLabel})</span>
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {slots.map((t) => {
+                const isTaken = takenToday.includes(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={time === t}
+                    disabled={isTaken}
+                    onClick={() => {
+                      setTime(t);
+                      setErrors((e) => ({ ...e, time: "" }));
+                    }}
+                    className="choice flex-col items-center justify-center gap-0.5 py-3"
+                    title={isTaken ? "Already booked" : undefined}
+                  >
+                    <span className="text-[14px] font-semibold">{t}</span>
+                    {!sameTz ? <span className="text-[10.5px] text-smoke">{localLabel(day, t) || " "}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+            {errors.time ? <p className="mt-2 text-[12px] text-ember">{errors.time}</p> : null}
+            {!sameTz ? <p className="mt-2 text-[11.5px] text-smoke">Times below each slot are shown in your timezone ({visitorTz}).</p> : null}
+
+            <p className="label mt-8">
+              <span className="text-gold-400">03</span> · Your details
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="b-name" className="field-label">
+                  Full name <span className="text-gold-400">*</span>
+                </label>
+                <input id="b-name" className="field mt-2" autoComplete="name" value={form.name} onChange={(e) => set("name", e.target.value)} aria-invalid={Boolean(errors.name)} />
+                {errors.name ? <p className="mt-1.5 text-[12px] text-ember">{errors.name}</p> : null}
+              </div>
+              <div>
+                <label htmlFor="b-email" className="field-label">
+                  Email <span className="text-gold-400">*</span>
+                </label>
+                <input id="b-email" type="email" className="field mt-2" autoComplete="email" value={form.email} onChange={(e) => set("email", e.target.value)} aria-invalid={Boolean(errors.email)} />
+                {errors.email ? <p className="mt-1.5 text-[12px] text-ember">{errors.email}</p> : null}
+              </div>
+              <div>
+                <label htmlFor="b-phone" className="field-label">
+                  Phone / WhatsApp
+                </label>
+                <input id="b-phone" type="tel" className="field mt-2" autoComplete="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="b-company" className="field-label">
+                  Company
+                </label>
+                <input id="b-company" className="field mt-2" autoComplete="organization" value={form.companyName} onChange={(e) => set("companyName", e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="b-topic" className="field-label">
+                  Topic
+                </label>
+                <select id="b-topic" className="field mt-2" value={form.topic} onChange={(e) => set("topic", e.target.value)}>
+                  {advanced.bookingTopics.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="b-budget" className="field-label">
+                  Budget
+                </label>
+                <select id="b-budget" className="field mt-2" value={form.budget} onChange={(e) => set("budget", e.target.value)}>
+                  <option value="">To discuss on the call</option>
+                  {advanced.budgetRanges.map((b) => (
+                    <option key={b.label}>{b.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="b-notes" className="field-label">
+                  Anything we should read first?
+                </label>
+                <textarea id="b-notes" rows={3} className="field mt-2" placeholder="Links, goals, deadlines…" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
               </div>
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="glass-card grad-border rounded-[32px] p-6 sm:p-10 space-y-6">
-              {/* Step 1: Date */}
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-2.5">
-                  1. Pick a Day (Mon – Sat)
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {days.map((d) => (
-                    <button
-                      key={d.dateStr}
-                      type="button"
-                      onClick={() => setSelectedDay(d.dateStr)}
-                      className={`rounded-2xl border p-3 text-center transition-all ${
-                        selectedDay === d.dateStr
-                          ? "border-brand-400 bg-brand-500/20 text-white shadow-lg shadow-brand-500/20"
-                          : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-white"
-                      }`}
-                    >
-                      <div className="text-[11px] font-mono text-slate-400 uppercase">{d.dayName}</div>
-                      <div className="text-sm font-bold text-white mt-1">{d.label}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {/* Step 2: Time */}
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-2.5">
-                  2. Pick a Time Slot (IST / GMT+5:30)
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  {TIME_SLOTS.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setSelectedTime(t)}
-                      className={`rounded-xl border py-2.5 text-xs font-semibold transition-all ${
-                        selectedTime === t
-                          ? "border-aqua-400 bg-aqua-500/20 text-aqua-300 shadow-md shadow-aqua-500/20"
-                          : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-white"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {errors.form ? <p className="mt-5 rounded-xl border border-ember/40 bg-ember/10 p-3 text-[13px] text-parchment">{errors.form}</p> : null}
 
-              {/* Step 3: Client Info */}
-              <div className="space-y-4 pt-2 border-t border-white/8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Your Full Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Rahul Sharma"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Work Email *
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@company.com"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Company / Organization (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. Acme Health"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Phone / WhatsApp
-                    </label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Primary Topic
-                    </label>
-                    <select
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-[#0d1024] px-4 py-3 text-sm text-white focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                    >
-                      <option value="New Web / App Build">New Web / App Build</option>
-                      <option value="UI/UX Product Design">UI/UX Product Design</option>
-                      <option value="Backend / Database Scaling">Backend / Database Scaling</option>
-                      <option value="Technical SEO & Programmatic Pages">Technical SEO & Programmatic Pages</option>
-                      <option value="Full Creative & Engineering Retainer">Full Creative & Engineering Retainer</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Estimated Project Budget
-                    </label>
-                    <select
-                      value={budget}
-                      onChange={(e) => setBudget(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-[#0d1024] px-4 py-3 text-sm text-white focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
-                    >
-                      <option value="Under ₹50,000">Under ₹50,000</option>
-                      <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-                      <option value="₹1,00,000 – ₹3,00,000">₹1,00,000 – ₹3,00,000</option>
-                      <option value="₹3,00,000 – ₹8,00,000">₹3,00,000 – ₹8,00,000</option>
-                      <option value="₹8,00,000+">₹8,00,000+</option>
-                      <option value="To Discuss on Call">To Discuss on Call</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Project Context or Specific Questions
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Tell us what you're building, target timeline, or any specific technology requirements..."
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 resize-none"
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">
-                  {error}
-                </p>
-              )}
-
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <span className="text-xs text-slate-400 flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  Free 30 mins · No credit card · Direct engineers
-                </span>
-                <PrimaryButton type="submit" className="w-full sm:w-auto">
-                  {loading ? "Reserving Slot..." : "Confirm 30-Min Call"}
-                </PrimaryButton>
-              </div>
-            </form>
-          )}
-
-          {/* Direct contact alternatives */}
-          <div className="mt-8 text-center text-xs text-slate-500 space-y-1">
-            <p>Prefer to write directly? Email us at <a href={`mailto:${company.email}`} className="text-brand-300 hover:underline">{company.email}</a></p>
-            <p>Direct WhatsApp & Phone: <a href={company.phoneHref} className="text-slate-300 hover:underline">{company.phone}</a></p>
-          </div>
-        </div>
+            <div className="mt-8 flex flex-col gap-4 border-t border-gold-300/10 pt-7 sm:flex-row sm:items-center sm:justify-between">
+              <p className={cn("text-[12.5px]", time ? "text-parchment" : "text-smoke")}>
+                {time && day ? (
+                  <>
+                    <Icon name="calendar" className="mr-1.5 inline h-3.5 w-3.5 text-gold-300" />
+                    {days.find((d) => d.key === day)?.day}, {days.find((d) => d.key === day)?.month} {days.find((d) => d.key === day)?.date} · {time} {settings.timezoneLabel}
+                  </>
+                ) : (
+                  "Free · no obligation · NDA on request"
+                )}
+              </p>
+              <button type="submit" disabled={busy} className="btn btn-gold btn-lg shine">
+                {busy ? "Reserving…" : `Confirm ${minutes}-min call`}
+              </button>
+            </div>
+          </form>
+        </Reveal>
       </div>
-    </div>
+    </section>
   );
 }

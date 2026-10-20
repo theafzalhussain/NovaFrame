@@ -1,110 +1,74 @@
+import { useId } from "react";
 import { Link } from "../lib/router";
-import { company } from "../data/content";
 import { cn } from "../utils/cn";
 
-/**
- * Bulletproof SVG Brand Logo:
- * Self-contained vector graphic with metallic indigo-to-cyan gradient,
- * zero external image dependency, zero missing file risks in Vite.
- */
+/** The Novaframe "N" monogram in champagne gold on obsidian. */
 export function BrandMark({ size = 38, className }: { size?: number; className?: string }) {
+  const id = useId().replace(/:/g, "");
   return (
     <span
-      className={cn(
-        "relative grid shrink-0 place-items-center overflow-hidden rounded-[11px] border border-white/15 bg-ink-950 shadow-[0_10px_26px_-12px_rgba(79,70,229,0.95)]",
-        className,
-      )}
-      style={{ width: size, height: size }}
+      className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-[11px]", className)}
+      style={{ width: size, height: size, boxShadow: "0 10px 26px -14px rgba(212,173,102,0.9)" }}
     >
-      <svg
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="h-full w-full p-1.5"
-      >
+      <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
         <defs>
-          <linearGradient id="nf-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#818cf8" />
-            <stop offset="50%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#22d3ee" />
+          <linearGradient id={`nf-g-${id}`} x1="10" y1="8" x2="90" y2="92" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#f6edd8" />
+            <stop offset="0.45" stopColor="#d4ad66" />
+            <stop offset="1" stopColor="#9c7134" />
           </linearGradient>
-          <linearGradient id="nf-glow-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#a5b4ff" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.1" />
-          </linearGradient>
+          <radialGradient id={`nf-r-${id}`} cx="30%" cy="20%" r="90%">
+            <stop offset="0" stopColor="#2a241c" />
+            <stop offset="1" stopColor="#0d0c0a" />
+          </radialGradient>
         </defs>
-
-        {/* Ambient background glow */}
-        <rect width="100" height="100" rx="18" fill="url(#nf-glow-grad)" />
-
-        {/* Outer Tech Frame */}
-        <rect
-          x="6"
-          y="6"
-          width="88"
-          height="88"
-          rx="18"
-          stroke="url(#nf-logo-grad)"
-          strokeWidth="3.5"
-          strokeOpacity="0.8"
-        />
-
-        {/* Geometric 'N' & Prism Monogram */}
-        <path
-          d="M26 74V26L52 60V26"
-          stroke="url(#nf-logo-grad)"
-          strokeWidth="9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M74 26V74"
-          stroke="#22d3ee"
-          strokeWidth="9"
-          strokeLinecap="round"
-        />
-
-        {/* Energy dot */}
-        <circle cx="74" cy="26" r="4.5" fill="#a3e635" />
+        <rect width="100" height="100" rx="24" fill={`url(#nf-r-${id})`} />
+        <rect x="8.5" y="8.5" width="83" height="83" rx="19" fill="none" stroke={`url(#nf-g-${id})`} strokeWidth="3" />
+        <path fill={`url(#nf-g-${id})`} d="M24 34.5 32.5 43V78H24Z" />
+        <path fill={`url(#nf-g-${id})`} d="M24 22h8.6L76 66.3V78h-6.6L24 31.6Z" />
+        <path fill={`url(#nf-g-${id})`} d="M67.5 22H76v42.4l-8.5-8.6Z" />
       </svg>
     </span>
   );
 }
 
-export function Logo({ compact = false, stacked = false }: { compact?: boolean; stacked?: boolean }) {
-  if (stacked) {
-    return (
-      <Link to="/" className="group inline-flex flex-col items-center gap-3" aria-label={company.name}>
-        <BrandMark size={46} className="transition-transform duration-500 group-hover:scale-105" />
-        <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-white">
-          Novaframe<span className="text-brand-400">.</span>
-        </span>
-      </Link>
-    );
-  }
-
+export function Logo({ compact = false, className }: { compact?: boolean; className?: string }) {
   return (
-    <Link to="/" className="group flex items-center gap-2.5" aria-label={company.name}>
-      <BrandMark size={36} className="transition-transform duration-500 group-hover:rotate-[-4deg]" />
+    <Link to="/" className={cn("group flex items-center gap-3", className)} aria-label="Novaframe Studio — home">
+      <BrandMark size={38} className="transition-transform duration-700 group-hover:rotate-[-6deg]" />
       {!compact && (
         <span className="flex flex-col leading-none">
-          <span className="font-display text-[16.5px] font-extrabold tracking-[-0.02em] text-white">
-            Novaframe<span className="text-brand-400">.</span>
+          <span className="font-display text-[19px] [font-weight:420] tracking-[-0.02em] text-ivory">
+            Novaframe<span className="text-gold-400">.</span>
           </span>
-          <span className="mt-[3px] font-mono text-[8.5px] tracking-[0.3em] text-slate-400 uppercase">
-            Studio
-          </span>
+          <span className="mt-[5px] font-mono text-[8.5px] tracking-[0.42em] text-mist uppercase">Studio</span>
         </span>
       )}
     </Link>
   );
 }
 
-/** Text-only client logo lockup for the trust strip */
-export function ClientWordmark({ name }: { name: string }) {
+/**
+ * Rotating circular seal — a luxury-house emblem with the monogram at
+ * its centre. Pure SVG, no images.
+ */
+export function Seal({ size = 132, className, text = "NOVAFRAME STUDIO · EST. 2026 · NEW DELHI · " }: { size?: number; className?: string; text?: string }) {
+  const id = useId().replace(/:/g, "");
   return (
-    <span className="font-display text-[13px] font-bold tracking-[0.18em] whitespace-nowrap text-slate-400 transition-colors duration-300 hover:text-white">
-      {name}
-    </span>
+    <div className={cn("relative", className)} style={{ width: size, height: size }} aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="animate-spin-slow absolute inset-0 h-full w-full">
+        <defs>
+          <path id={`seal-${id}`} d="M100,100 m-76,0 a76,76 0 1,1 152,0 a76,76 0 1,1 -152,0" />
+        </defs>
+        <circle cx="100" cy="100" r="96" fill="none" stroke="rgba(227,200,140,0.28)" strokeWidth="1" />
+        <circle cx="100" cy="100" r="58" fill="none" stroke="rgba(227,200,140,0.22)" strokeWidth="1" />
+        <text fill="#e3c88c" fontFamily="JetBrains Mono, monospace" fontSize="12.5" letterSpacing="4.2">
+          <textPath href={`#seal-${id}`}>{text.repeat(2)}</textPath>
+        </text>
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        <BrandMark size={size * 0.34} />
+      </div>
+    </div>
   );
 }

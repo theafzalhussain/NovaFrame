@@ -1,290 +1,267 @@
+import { useEffect, useState } from "react";
 import HeroCanvas from "../components/HeroCanvas";
+import Comparison from "../components/Comparison";
+import Estimator from "../components/Estimator";
 import Faq from "../components/Faq";
-import { Icon } from "../components/Icons";
+import FoundingProgram from "../components/FoundingProgram";
+import ProjectCard, { ProjectLinks, StatusPill } from "../components/ProjectCard";
 import ProjectVisual from "../components/ProjectVisual";
-import { TechLogo } from "../components/TechLogo";
-import { ClientWordmark } from "../components/Brand";
+import Testimonials from "../components/Testimonials";
+import { Seal } from "../components/Brand";
+import { Icon } from "../components/Icons";
+import { StatusDot, useStudioStatus } from "../components/StudioStatus";
+import { Button, Eyebrow, IconTile, Marquee, Reveal, SectionHeading, SpotlightCard, Stat } from "../components/ui";
+import type { Project } from "../data/types";
+import { useContent } from "../lib/content";
+import { Link, scrollToId } from "../lib/router";
+import { availabilityLabel, hostOf, whatsappLink } from "../lib/site";
+import { track } from "../lib/api";
 import { cn } from "../utils/cn";
-import {
-  Eyebrow,
-  GhostButton,
-  Glow,
-  PrimaryButton,
-  Reveal,
-  SectionHeading,
-  SpotlightCard,
-  Stat,
-} from "../components/ui";
-import {
-  clientLogos,
-  company,
-  credentials,
-  heroStats,
-  processSteps,
-  projects,
-  services,
-  techStack,
-  testimonials,
-  whyChooseUs,
-} from "../data/content";
-import { Link } from "../lib/router";
 
 /* ------------------------------------------------------------------ */
-/* Hero Section                                                       */
+/* Rotating headline word                                             */
+/* ------------------------------------------------------------------ */
+function Rotator({ words }: { words: string[] }) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (words.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setIndex((i) => (i + 1) % words.length), 2800);
+    return () => clearInterval(id);
+  }, [words.length]);
+  if (!words.length) return null;
+  // The gold gradient is applied per word: background-clip:text on the parent
+  // would paint through every (hidden) child's glyphs.
+  return (
+    <span className="rotator serif-accent">
+      {words.map((word, i) => {
+        const state = i === index ? "active" : (i + 1) % words.length === index ? "prev" : "next";
+        return (
+          <span key={word + i} data-state={state} aria-hidden={state !== "active"} className="text-gold-shine">
+            {word}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Hero                                                               */
 /* ------------------------------------------------------------------ */
 function Hero() {
-  return (
-    <section className="relative min-h-[94vh] flex items-center overflow-hidden pt-36 pb-16 md:pt-44 md:pb-24">
-      {/* 3D WebGL Canvas Layer */}
-      <HeroCanvas className="absolute inset-0 h-full w-full opacity-75 pointer-events-none" />
+  const { settings, collections } = useContent();
+  const status = useStudioStatus();
+  const live = collections.projects.filter((p) => p.liveUrl).slice(0, 2);
 
-      {/* Grid Pattern and Ambient Light */}
-      <div className="grid-bg absolute inset-0 pointer-events-none" aria-hidden />
-      <Glow className="-top-24 -left-20 h-96 w-96" color="rgba(79,70,229,0.35)" />
-      <Glow className="top-1/3 -right-24 h-96 w-96" color="rgba(6,182,212,0.22)" />
-      <Glow className="-bottom-32 left-1/3 h-80 w-80" color="rgba(99,102,241,0.18)" />
+  return (
+    <section className="relative flex min-h-[100svh] items-center overflow-hidden pt-36 pb-20 lg:pt-32">
+      <div className="pointer-events-none absolute inset-0 lg:left-[36%]">
+        <HeroCanvas className="hero-canvas h-full w-full opacity-45 lg:opacity-100" />
+      </div>
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-ink-950 via-ink-950/75 to-transparent lg:via-ink-950/30" aria-hidden />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-ink-950 to-transparent" aria-hidden />
 
       <div className="shell relative w-full">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.14fr_0.86fr] lg:gap-14">
-          <div>
-            <Reveal>
-              <div className="flex flex-wrap items-center gap-3">
-                <Eyebrow tone="brand">High-Performance Digital Studio</Eyebrow>
-                <span className="inline-flex items-center gap-2 rounded-full border border-lime-glow/20 bg-lime-glow/[0.06] px-3.5 py-1.5 font-mono text-[11px] font-medium text-lime-glow backdrop-blur-md">
-                  <span className="h-1.5 w-1.5 rounded-full bg-lime-glow animate-pulse" />
-                  Accepting 2 Projects for Q2/Q3
-                </span>
-              </div>
-            </Reveal>
-
-            <Reveal delay={80}>
-              <h1 className="font-display mt-6 text-[2.75rem] leading-[1.04] font-extrabold tracking-[-0.035em] text-white sm:text-6xl md:text-[4.2rem]">
-                We engineer products
-                <br />
-                that convert users and
-                <br />
-                <span className="text-gradient">scale without limits.</span>
-              </h1>
-            </Reveal>
-
-            <Reveal delay={160}>
-              <p className="mt-6 max-w-xl text-[16px] leading-relaxed text-slate-300/90 md:text-[18px]">
-                {company.name} is an elite digital team uniting world-class web and app development,
-                cutting-edge UI/UX design, programmatic SEO, and cinematic motion video.
-                Production-grade architecture with zero bloated dependencies.
-              </p>
-            </Reveal>
-
-            <Reveal delay={240}>
-              <div className="mt-9 flex flex-wrap items-center gap-4">
-                <PrimaryButton to="/contact">Start a Project</PrimaryButton>
-                <GhostButton to="/portfolio">Explore Case Studies</GhostButton>
-                <div className="hidden sm:flex items-center gap-2 pl-2 text-xs font-mono text-slate-400">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                  <span>SLA Guarantee</span>
-                </div>
-              </div>
-            </Reveal>
-
-            <Reveal delay={320}>
-              <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {heroStats.map((s) => (
-                  <Stat
-                    key={s.label}
-                    value={s.value}
-                    suffix={s.suffix}
-                    decimals={s.decimals ?? 0}
-                    label={s.label}
-                  />
-                ))}
-              </div>
-            </Reveal>
-          </div>
-
-          {/* Interactive Floating Tech Card */}
-          <Reveal delay={220} className="hidden lg:block">
-            <div className="animate-floaty relative">
-              <div className="glass-card ring-glow grad-border rounded-[32px] p-7 backdrop-blur-2xl">
-                <div className="flex items-center justify-between border-b border-white/8 pb-4">
-                  <div className="flex items-center gap-2.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <p className="font-mono text-[11px] tracking-[0.2em] text-slate-300 uppercase">
-                      production_stack.lock
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-500/70" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-2.5 font-mono text-[12px] leading-relaxed text-slate-300">
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">core_framework</span>
-                    <span className="text-aqua-300 font-semibold">"Next.js 15 / React 19"</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">type_safety</span>
-                    <span className="text-aqua-300 font-semibold">"TypeScript 5.8 Strict"</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">design_system</span>
-                    <span className="text-aqua-300 font-semibold">"Tailwind CSS v4 + Figma"</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">3d_rendering</span>
-                    <span className="text-aqua-300 font-semibold">"Three.js / WebGL 2"</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">backend_runtime</span>
-                    <span className="text-aqua-300 font-semibold">"Node.js + Express API"</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">database_engine</span>
-                    <span className="text-aqua-300 font-semibold">"PostgreSQL / SQL"</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1 border-b border-white/[0.04]">
-                    <span className="text-slate-400">observability</span>
-                    <span className="text-brand-300 font-semibold">"Datadog + Sentry"</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-1.5">
-                    <span className="text-slate-400">lighthouse_score</span>
-                    <span className="text-lime-glow font-bold">99 / 100 All Green</span>
-                  </div>
-                </div>
-
-                <div className="mt-6 grid grid-cols-4 gap-2.5 border-t border-white/8 pt-5">
-                  {techStack[0].items.slice(0, 8).map((t) => (
-                    <TechLogo key={t.name} name={t.name} icon={t.icon} size="sm" />
-                  ))}
-                </div>
-              </div>
-
-              {/* Status pill tag */}
-              <div className="glass-card absolute -bottom-6 -left-6 hidden rounded-2xl px-5 py-3.5 sm:block shadow-2xl border border-white/12">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center">
-                    <Icon name="check" className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <p className="font-display text-xs font-bold text-white">Live Pipeline</p>
-                    <p className="text-[11px] font-mono text-emerald-400">CI/CD passing · Edge active</p>
-                  </div>
-                </div>
-              </div>
+        <div className="max-w-[47rem]">
+          <Reveal>
+            <Eyebrow>{settings.hero.eyebrow}</Eyebrow>
+          </Reveal>
+          <Reveal delay={90}>
+            <h1 className="display mt-8 text-[2.9rem] leading-[0.98] sm:text-[4.4rem] lg:text-[5.4rem]">
+              {settings.hero.title}
+              <br />
+              <Rotator words={settings.hero.rotating} />
+            </h1>
+          </Reveal>
+          <Reveal delay={170}>
+            <p className="mt-8 max-w-xl text-[16.5px] leading-relaxed text-sand md:text-[19px] lg:[text-shadow:0_0_14px_rgb(8_7_6/0.95),0_0_32px_rgb(8_7_6/0.85)]">{settings.hero.subtitle}</p>
+          </Reveal>
+          <Reveal delay={250}>
+            <div className="mt-11 flex flex-wrap items-center gap-3.5">
+              <Button to="/book" size="lg" arrow track="hero_book">
+                Book a free strategy call
+              </Button>
+              <Button to="/work" size="lg" variant="line" track="hero_work">
+                See live work
+              </Button>
+            </div>
+            <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-mist">
+              <span className="inline-flex items-center gap-2">
+                <StatusDot online={status.online} />
+                {availabilityLabel(settings)}
+              </span>
+              <span className="hidden h-3 w-px bg-gold-300/20 sm:block" />
+              <a
+                href={whatsappLink(settings)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => track("cta_click", { label: "hero_whatsapp" })}
+                className="inline-flex items-center gap-2 text-parchment transition hover:text-gold-200"
+              >
+                <Icon name="whatsapp" className="h-4 w-4 text-gold-300" /> WhatsApp the founder
+              </a>
             </div>
           </Reveal>
         </div>
-      </div>
-    </section>
-  );
-}
 
-/* ------------------------------------------------------------------ */
-/* Client Trust Strip                                                 */
-/* ------------------------------------------------------------------ */
-function ClientStrip() {
-  const loop = [...clientLogos, ...clientLogos];
-  return (
-    <section className="border-y border-white/8 bg-ink-900/60 py-10 backdrop-blur-md">
-      <div className="shell mb-6 flex items-center justify-between text-center">
-        <p className="w-full font-mono text-[11px] font-medium tracking-[0.24em] text-slate-400 uppercase">
-          Trusted by ambitious startups and fast-moving enterprises worldwide
-        </p>
-      </div>
-      <div className="marquee-mask overflow-hidden">
-        <div className="marquee-track items-center gap-14 px-6">
-          {loop.map((name, i) => (
-            <ClientWordmark key={`${name}-${i}`} name={name} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Capabilities Grid (5 Verticals)                                    */
-/* ------------------------------------------------------------------ */
-function Capabilities() {
-  return (
-    <section className="relative py-24 md:py-32">
-      <Glow className="top-24 left-1/2 h-72 w-[600px] -translate-x-1/2" color="rgba(79,70,229,0.18)" />
-      <div className="shell relative">
-        <Reveal>
-          <SectionHeading
-            eyebrow="Core Competencies"
-            title="Five integrated capabilities,"
-            highlight="one singular standard."
-            description="Eliminate multi-agency overhead. Our unified senior studio handles your product from initial design tokens to production SQL and launch film."
-          />
+        <Reveal delay={330}>
+          <div className="mt-20 grid max-w-3xl grid-cols-2 gap-x-8 gap-y-10 border-t border-gold-300/10 pt-10 sm:grid-cols-4">
+            {settings.stats.map((s) => (
+              <Stat key={s.label} value={s.value} suffix={s.suffix} label={s.label} />
+            ))}
+          </div>
         </Reveal>
+      </div>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {/* Live products floating over the sphere */}
+      <div className="absolute right-[5%] bottom-[16%] hidden flex-col gap-3 xl:flex">
+        {live.map((p, i) => (
+          <a
+            key={p.id}
+            href={p.liveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => track("cta_click", { label: `hero_live_${p.id}` })}
+            className={cn(
+              "lux-glass group flex w-[270px] items-center gap-3.5 rounded-2xl px-4 py-3.5 transition hover:border-gold-300/40",
+              i === 0 ? "animate-floaty" : "animate-floaty-slow translate-x-10",
+            )}
+          >
+            <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gold-300/15 bg-ink-850">
+              {p.cover ? <img src={p.cover} alt="" className="h-full w-full object-cover object-top" /> : null}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ivory">
+                {p.title}
+                <span className="h-1.5 w-1.5 rounded-full bg-sage animate-pulse-dot" />
+              </span>
+              <span className="block truncate font-mono text-[10.5px] text-mist">{hostOf(p.liveUrl)}</span>
+            </span>
+            <Icon name="arrow-up-right" className="h-4 w-4 text-gold-300 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </a>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => scrollToId("proof")}
+        className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-smoke transition hover:text-gold-200 md:flex"
+        aria-label="Scroll to content"
+      >
+        <span className="label text-[9.5px]">Scroll</span>
+        <span className="h-10 w-px bg-gradient-to-b from-gold-400 to-transparent" />
+      </button>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Proof strip                                                        */
+/* ------------------------------------------------------------------ */
+function ProofStrip() {
+  const { collections } = useContent();
+  const products = collections.projects.map((p) => (
+    <span key={p.id} className="flex items-center gap-14">
+      <span className="flex items-baseline gap-3">
+        <span className="display serif-accent text-[1.65rem] text-parchment">{p.title}</span>
+        <span className="font-mono text-[11px] text-smoke">{hostOf(p.liveUrl) || p.category}</span>
+      </span>
+      <span className="h-1.5 w-1.5 rotate-45 bg-gold-500/70" />
+    </span>
+  ));
+  const tools = Array.from(new Set(collections.projects.flatMap((p) => p.stack))).slice(0, 22);
+
+  return (
+    <section id="proof" className="relative border-y border-gold-300/[0.08] bg-ink-950/70 py-10">
+      <p className="label mb-7 text-center">Live in production — open any of them</p>
+      <Marquee items={products} gap="gap-14" />
+      <Marquee
+        className="mt-6"
+        reverse
+        gap="gap-10"
+        items={tools.map((t) => (
+          <span key={t} className="font-mono text-[11.5px] tracking-[0.18em] text-smoke uppercase">
+            {t}
+          </span>
+        ))}
+      />
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Services                                                           */
+/* ------------------------------------------------------------------ */
+function ServicesSection() {
+  const { collections } = useContent();
+  const services = collections.services;
+  return (
+    <section className="relative py-28 md:py-36">
+      <div className="shell">
+        <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
+          <Reveal>
+            <SectionHeading
+              align="left"
+              index="01"
+              eyebrow="Services"
+              title="Six disciplines."
+              highlight="One accountable studio."
+              description="No multi-vendor juggling. We take a product from the first design token to the production database — and the launch film."
+            />
+          </Reveal>
+          <Reveal delay={100}>
+            <Button to="/services" variant="line" arrow>
+              All services
+            </Button>
+          </Reveal>
+        </div>
+
+        <div className="mt-16 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {services.map((s, i) => (
-            <Reveal key={s.id} delay={i * 80} className={i === 0 ? "lg:col-span-2" : ""}>
-              <SpotlightCard className="h-full p-7 flex flex-col justify-between">
-                <div>
+            <Reveal key={s.id} delay={(i % 3) * 80} className={cn(i === 0 && "lg:col-span-2")}>
+              <SpotlightCard className="h-full" ticks={i === 0}>
+                <Link to={`/services/${s.id}`} className="flex h-full flex-col p-7 md:p-8">
                   <div className="flex items-start justify-between gap-4">
-                    <span className="grid h-14 w-14 place-items-center rounded-2xl border border-white/12 bg-gradient-to-br from-brand-500/25 to-aqua-500/15 text-brand-300 shadow-inner">
-                      <Icon name={s.icon} className="h-6 w-6" />
-                    </span>
-                    <span className="font-mono text-[11px] font-bold tracking-[0.2em] text-slate-500 uppercase">
-                      0{i + 1}
-                    </span>
+                    <IconTile name={s.icon} size="lg" />
+                    <span className="display serif-accent text-[2.6rem] leading-none text-gold-300/25">{String(i + 1).padStart(2, "0")}</span>
                   </div>
-
-                  <h3 className="font-display mt-6 text-2xl font-bold tracking-tight text-white">{s.title}</h3>
-                  <p className="mt-1.5 text-[14px] font-medium text-brand-300">{s.tagline}</p>
-                  <p className="mt-3.5 text-[15px] leading-relaxed text-slate-300/80">{s.short}</p>
-
+                  <h3 className="display mt-8 text-[1.85rem] leading-tight">{s.title}</h3>
+                  <p className="mt-2 text-[14px] font-medium text-gold-300/85">{s.tagline}</p>
+                  <p className="mt-4 text-[14.5px] leading-relaxed text-mist">{s.short}</p>
                   <ul className="mt-6 flex flex-wrap gap-2">
-                    {s.items.slice(0, i === 0 ? 6 : 4).map((it) => (
-                      <li
-                        key={it.title}
-                        className="rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[12px] font-medium text-slate-300"
-                      >
+                    {s.items.slice(0, i === 0 ? 6 : 3).map((it) => (
+                      <li key={it.title} className="chip">
                         {it.title}
                       </li>
                     ))}
                   </ul>
-                </div>
-
-                <div className="mt-8 pt-5 border-t border-white/8 flex items-center justify-between">
-                  <Link
-                    to={`/services/${s.id}`}
-                    className="inline-flex items-center gap-2 text-[14px] font-semibold text-white transition-all hover:text-brand-300 hover:gap-3"
-                  >
-                    <span>View Specifications</span>
-                    <span aria-hidden>→</span>
-                  </Link>
-                  <span className="font-mono text-[11px] text-slate-500 uppercase">{s.deliverable.split("+")[0]}</span>
-                </div>
+                  <div className="mt-auto flex items-center justify-between border-t border-gold-300/10 pt-5 text-[13px]">
+                    <span className="text-mist">
+                      From <span className="font-semibold text-parchment">{s.startingAt}</span> · {s.timeline}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-gold-200 transition-all group-hover:gap-2.5">
+                      Explore <Icon name="arrow" className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                </Link>
               </SpotlightCard>
             </Reveal>
           ))}
 
-          {/* Scoping CTA Card */}
-          <Reveal delay={440}>
-            <div className="grad-border relative flex h-full flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600/35 via-ink-850 to-aqua-500/20 p-8 shadow-2xl">
-              <div className="dot-bg absolute inset-0 opacity-40 pointer-events-none" aria-hidden />
-              <div className="relative">
-                <span className="inline-block rounded-full bg-white/10 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-200">
-                  Custom Architecture
-                </span>
-                <h3 className="font-display mt-5 text-2xl font-extrabold tracking-tight text-white">
-                  Need a specialized setup?
+          {/* First card spans two columns, so the grid holds services.length + 1 cells before this tile. */}
+          <Reveal delay={160} className={cn({ 0: "lg:col-span-3", 1: "lg:col-span-2", 2: "" }[(services.length + 1) % 3])}>
+            <div className="lux-card gold-edge relative flex h-full flex-col justify-between gap-8 overflow-hidden p-8 md:flex-row md:items-center">
+              <div className="dot-grid pointer-events-none absolute inset-0 opacity-30" aria-hidden />
+              <div className="relative max-w-lg">
+                <span className="chip chip-gold">Not sure what you need?</span>
+                <h3 className="display mt-5 text-[1.9rem] leading-tight">
+                  Get a transparent estimate <span className="serif-accent text-gold">in 30 seconds.</span>
                 </h3>
-                <p className="mt-3 text-[15px] leading-relaxed text-slate-200/90">
-                  Whether migrating an enterprise backend, architecting custom WebGL visuals, or optimizing high-volume checkout funnels, let's discuss your scope.
-                </p>
+                <p className="mt-3 text-[14.5px] text-mist">No email required. Turn it into a fixed, written quote when you're ready.</p>
               </div>
-              <div className="relative mt-8">
-                <PrimaryButton to="/contact" className="w-full">
-                  Book a Scoping Session
-                </PrimaryButton>
-              </div>
+              <button type="button" onClick={() => scrollToId("estimator")} className="btn btn-gold shine relative shrink-0">
+                Open the estimator <Icon name="arrow-down" className="h-3.5 w-3.5" />
+              </button>
             </div>
           </Reveal>
         </div>
@@ -294,264 +271,195 @@ function Capabilities() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Selected Portfolio Work — Premium Bento Showcase                   */
+/* Selected work                                                      */
 /* ------------------------------------------------------------------ */
-function FeaturedWork() {
-  const featured = projects.slice(0, 4);
+function FeatureRow({ project, index, total, flip }: { project: Project; index: number; total: number; flip: boolean }) {
   return (
-    <section className="relative border-y border-white/8 bg-ink-900/40 py-24 md:py-32 overflow-hidden">
-      {/* Ambient glows */}
-      <Glow className="-top-20 left-1/3 h-80 w-80" color="rgba(99,102,241,0.16)" />
-      <Glow className="bottom-0 right-1/4 h-72 w-72" color="rgba(6,182,212,0.12)" />
+    <article className="lux-card lux-hover group grid overflow-hidden lg:grid-cols-[1.15fr_0.85fr]">
+      <Link
+        to={`/work/${project.id}`}
+        className={cn("relative block aspect-[16/11] overflow-hidden border-gold-300/10 lg:aspect-auto lg:min-h-[480px]", flip ? "lg:order-2 lg:border-l" : "lg:border-r")}
+        aria-label={`${project.title} case study`}
+      >
+        <ProjectVisual project={project} />
+        <div className="absolute bottom-4 left-4">
+          <StatusPill status={project.status} />
+        </div>
+      </Link>
+      <div className="flex flex-col p-7 md:p-10">
+        <div className="flex items-center justify-between">
+          <span className="label text-gold-400">{project.category}</span>
+          <span className="font-mono text-[11px] text-smoke">
+            {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
+          </span>
+        </div>
+        <h3 className="display mt-5 text-[2.4rem] leading-none md:text-[2.9rem]">{project.title}</h3>
+        <p className="mt-3 text-[15px] font-medium text-gold-300/85">{project.subtitle}</p>
+        <p className="mt-5 text-[15px] leading-relaxed text-mist">{project.summary}</p>
+        <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-gold-300/10 pt-7">
+          {project.metrics.slice(0, 4).map((m) => (
+            <div key={m.label}>
+              <div className="display text-gold text-[1.9rem] leading-none">{m.value}</div>
+              <div className="mt-1.5 text-[12px] text-smoke">{m.label}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-7 flex flex-wrap gap-1.5">
+          {project.stack.slice(0, 6).map((t) => (
+            <span key={t} className="rounded-md border border-gold-300/10 px-2 py-1 font-mono text-[10.5px] text-mist">
+              {t}
+            </span>
+          ))}
+        </div>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-4 pt-8">
+          <ProjectLinks project={project} />
+          <Link to={`/work/${project.id}`} className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-gold-200 transition-all hover:gap-3">
+            Read the case study <Icon name="arrow" className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
 
-      <div className="shell relative">
-        {/* Header row */}
-        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+function SelectedWork() {
+  const { collections } = useContent();
+  const featured = collections.projects.filter((p) => p.featured);
+  const list = (featured.length ? featured : collections.projects).slice(0, 4);
+  const liveCount = collections.projects.filter((p) => p.liveUrl).length;
+  return (
+    <section className="relative border-y border-gold-300/[0.07] bg-ink-900/50 py-28 md:py-36">
+      <div className="shell">
+        <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
           <Reveal>
             <SectionHeading
               align="left"
-              eyebrow="Selected Work"
-              title="Battle-tested products,"
-              highlight="proven metrics."
-              description="Real productions delivered for founders and teams. Every card links to a full case study with architecture, stack and outcomes."
+              index="02"
+              eyebrow="Selected work"
+              title={`${liveCount} live products.`}
+              highlight="Every one of them clickable."
+              description="Not mock-ups, not borrowed logos. Real products with real APIs, failure handling and measured performance — the standard we bring to every client build."
             />
           </Reveal>
-          <Reveal delay={120}>
-            <GhostButton to="/portfolio">Browse All Case Studies</GhostButton>
+          <Reveal delay={100}>
+            <Button to="/work" variant="line" arrow>
+              All work
+            </Button>
           </Reveal>
         </div>
 
-        {/* Bento grid — first card spans 2 columns for cinematic emphasis */}
-        <div className="mt-14 grid gap-6 lg:grid-cols-2">
-          {/* Featured large card */}
-          <Reveal className="lg:row-span-2">
-            <Link to={`/work/${featured[0].id}`} className="group block h-full">
-              <div className="premium-card relative h-full overflow-hidden rounded-[32px] border border-white/12 bg-gradient-to-b from-white/[0.06] to-white/[0.015]">
-                <div className="relative aspect-[16/11] overflow-hidden bg-[#0a0d1a]">
-                  <div className={cn("absolute inset-0 bg-gradient-to-br opacity-70", featured[0].accent)} />
-                  <div className="project-visual absolute inset-0">
-                    <ProjectVisual project={featured[0]} />
-                  </div>
-                  <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#0a0d1a] to-transparent" />
-
-                  {/* Badges */}
-                  <div className="absolute left-5 top-5 flex gap-2">
-                    <span className="animate-float-badge flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 backdrop-blur-md">
-                      <svg viewBox="0 0 24 24" className="h-3 w-3 fill-amber-300">
-                        <path d="m12 2 2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8L12 2Z" />
-                      </svg>
-                      <span className="font-mono text-[10px] font-bold tracking-[0.12em] text-amber-200 uppercase">Featured</span>
-                    </span>
-                    <span className="rounded-full border border-white/20 bg-black/55 px-3 py-1.5 font-mono text-[10px] font-semibold tracking-[0.14em] text-white uppercase backdrop-blur-md">
-                      {featured[0].category}
-                    </span>
-                  </div>
-
-                  {/* Hover CTA */}
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-500 group-hover:bg-black/25 group-hover:opacity-100">
-                    <span className="translate-y-3 scale-95 rounded-full bg-white/95 px-6 py-3 font-display text-sm font-bold text-slate-900 shadow-2xl transition-all duration-500 group-hover:translate-y-0 group-hover:scale-100">
-                      Read Case Study →
-                    </span>
-                  </div>
-                </div>
-
-                {/* Body */}
-                <div className="p-7">
-                  <span className="font-mono text-[11px] font-semibold tracking-[0.18em] text-brand-300 uppercase">
-                    {featured[0].client} · {featured[0].year}
-                  </span>
-                  <h3 className="font-display mt-2 text-2xl font-extrabold tracking-tight text-white transition-colors duration-300 group-hover:text-brand-200 sm:text-[26px]">
-                    {featured[0].title}
-                  </h3>
-                  <p className="mt-3 line-clamp-2 text-[14.5px] leading-relaxed text-slate-400">
-                    {featured[0].summary}
-                  </p>
-
-                  {/* Metrics */}
-                  <div className="mt-6 grid grid-cols-3 gap-2 border-t border-white/10 pt-5">
-                    {featured[0].metrics.map((m) => (
-                      <div key={m.label} className="text-center">
-                        <div className="metric-value font-display text-xl font-extrabold">{m.value}</div>
-                        <div className="mt-0.5 font-mono text-[9px] tracking-[0.14em] text-slate-500 uppercase">{m.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </Link>
-          </Reveal>
-
-          {/* Two stacked smaller cards */}
-          <div className="grid gap-6 lg:grid-cols-1">
-            {featured.slice(1, 3).map((p, i) => (
-              <Reveal key={p.id} delay={120 + i * 90}>
-                <Link to={`/work/${p.id}`} className="group block h-full">
-                  <div className="premium-card flex h-full flex-col overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.015] sm:flex-row">
-                    <div className="relative aspect-[16/10] shrink-0 overflow-hidden bg-[#0a0d1a] sm:aspect-auto sm:w-52">
-                      <div className={cn("absolute inset-0 bg-gradient-to-br opacity-70", p.accent)} />
-                      <div className="project-visual absolute inset-0">
-                        <ProjectVisual project={p} />
-                      </div>
-                    </div>
-                    <div className="flex flex-1 flex-col justify-between p-5 sm:p-6">
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-[10px] font-semibold tracking-[0.18em] text-brand-300 uppercase">
-                            {p.client}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-500">{p.year}</span>
-                        </div>
-                        <h3 className="font-display mt-1.5 text-[17px] font-bold text-white transition group-hover:text-brand-300">
-                          {p.title}
-                        </h3>
-                        <p className="mt-1.5 line-clamp-2 text-[13px] text-slate-400">{p.summary}</p>
-                      </div>
-                      <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-3">
-                        <div className="flex gap-3">
-                          {p.metrics.slice(0, 2).map((m) => (
-                            <div key={m.label}>
-                              <span className="metric-value font-display text-sm font-extrabold">{m.value}</span>
-                              <span className="ml-1 font-mono text-[9px] tracking-wider text-slate-500 uppercase">{m.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <span className="text-slate-500 transition-all duration-300 group-hover:translate-x-1 group-hover:text-aqua-300">→</span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
+        <div className="mt-16 space-y-6">
+          {list.slice(0, 2).map((p, i) => (
+            <Reveal key={p.id}>
+              <FeatureRow project={p} index={i} total={list.length} flip={i % 2 === 1} />
+            </Reveal>
+          ))}
+        </div>
+        {list.length > 2 ? (
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
+            {list.slice(2).map((p, i) => (
+              <Reveal key={p.id} delay={i * 90}>
+                <ProjectCard project={p} />
               </Reveal>
             ))}
           </div>
-
-          {/* Fourth card — wide CTA-style */}
-          {featured[3] && (
-            <Reveal delay={300} className="lg:col-span-2">
-              <Link to={`/work/${featured[3].id}`} className="group block h-full">
-                <div className="premium-card flex h-full flex-col overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.015] md:flex-row">
-                  <div className="relative aspect-[16/9] shrink-0 overflow-hidden bg-[#0a0d1a] md:aspect-auto md:w-72">
-                    <div className={cn("absolute inset-0 bg-gradient-to-br opacity-70", featured[3].accent)} />
-                    <div className="project-visual absolute inset-0">
-                      <ProjectVisual project={featured[3]} />
-                    </div>
-                  </div>
-                  <div className="flex flex-1 flex-col justify-between p-6">
-                    <div>
-                      <span className="font-mono text-[10px] font-semibold tracking-[0.18em] text-brand-300 uppercase">
-                        {featured[3].client} · {featured[3].category}
-                      </span>
-                      <h3 className="font-display mt-1.5 text-[18px] font-bold text-white transition group-hover:text-brand-300">
-                        {featured[3].title}
-                      </h3>
-                      <p className="mt-1.5 line-clamp-2 text-[13.5px] text-slate-400">{featured[3].summary}</p>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between">
-                      <div className="flex flex-wrap gap-1.5">
-                        {featured[3].stack.slice(0, 4).map((t) => (
-                          <span key={t} className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[10px] text-slate-400">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                      <span className="text-slate-500 transition-all duration-300 group-hover:translate-x-1 group-hover:text-aqua-300">→</span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            </Reveal>
-          )}
-        </div>
+        ) : null}
       </div>
     </section>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Production Process                                                 */
+/* Why us — proof, code, comparison, guarantees                       */
 /* ------------------------------------------------------------------ */
-function Process() {
+function WhyUs() {
+  const { collections, settings } = useContent();
+  const repos = collections.projects.filter((p) => p.repoUrl);
+  const github = settings.socials.find((s) => s.icon === "github")?.href;
+
   return (
-    <section className="relative py-24 md:py-32">
+    <section className="relative py-28 md:py-36">
       <div className="shell">
         <Reveal>
           <SectionHeading
-            eyebrow="Operating Discipline"
-            title="A structured sprint cycle"
-            highlight="with zero blind spots."
-            description="Predictable deliverables, weekly live demonstration calls, and real-time Notion sprint tracking. Here is how your build progresses."
+            index="03"
+            eyebrow="Why Novaframe"
+            title="Agency-grade craft."
+            highlight="Founder-level accountability."
+            description="We sit between slow, expensive agencies and unpredictable freelancers: clean engineering, direct access to the person building it, and pricing a growing business can plan around."
           />
         </Reveal>
-        <div className="mt-16 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-          {processSteps.map((s, i) => (
-            <Reveal key={s.step} delay={i * 70}>
-              <SpotlightCard className="relative h-full p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-display text-4xl font-extrabold text-white/15">{s.step}</span>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] font-medium text-brand-300">
-                      {s.duration}
+
+        <div className="mt-16 grid gap-px overflow-hidden rounded-[26px] border border-gold-300/10 bg-gold-300/10 md:grid-cols-2 lg:grid-cols-3">
+          {collections.whyUs.map((w, i) => (
+            <Reveal key={w.id} delay={(i % 3) * 70} className="h-full">
+              <div className="group h-full bg-ink-950 p-8 transition-colors hover:bg-ink-900">
+                <div className="flex items-center justify-between">
+                  <IconTile name={w.icon} />
+                  <span className="font-mono text-[11px] text-smoke">{String(i + 1).padStart(2, "0")}</span>
+                </div>
+                <h3 className="mt-7 text-[18px] font-semibold text-ivory">{w.title}</h3>
+                <p className="mt-2.5 text-[14.5px] leading-relaxed text-mist">{w.desc}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        {/* Inspect the code */}
+        <Reveal delay={80}>
+          <div className="lux-card mt-8 grid gap-10 overflow-hidden p-8 md:p-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div>
+              <span className="eyebrow">Inspect before you hire</span>
+              <h3 className="display mt-6 text-[2.1rem] leading-tight md:text-[2.5rem]">
+                Our code is public. <span className="serif-accent text-gold">Read it before you sign.</span>
+              </h3>
+              <p className="mt-5 max-w-md text-[15px] leading-relaxed text-mist">
+                It's the most honest pitch a studio can make. Every product we showcase has an open repository — architecture, commits and all.
+              </p>
+              {github ? (
+                <Button href={github} variant="line" icon="github" className="mt-8" track="why_github">
+                  View GitHub profile
+                </Button>
+              ) : null}
+            </div>
+            <ul className="divide-y divide-gold-300/[0.08] rounded-2xl border border-gold-300/10 bg-ink-950/60">
+              {repos.map((p) => (
+                <li key={p.id}>
+                  <a
+                    href={p.repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => track("cta_click", { label: `repo_list_${p.id}` })}
+                    className="group flex items-center gap-4 px-5 py-4 transition hover:bg-gold-300/[0.04]"
+                  >
+                    <Icon name="github" className="h-5 w-5 shrink-0 text-gold-300" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-mono text-[12.5px] text-parchment">{p.repoUrl?.replace(/^https?:\/\/(www\.)?github\.com\//, "")}</span>
+                      <span className="block truncate text-[12px] text-smoke">{p.stack.slice(0, 4).join(" · ")}</span>
                     </span>
-                  </div>
-                  <h3 className="font-display mt-4 text-[17px] font-bold text-white">{s.title}</h3>
-                  <p className="mt-2.5 text-[13.5px] leading-relaxed text-slate-400">{s.desc}</p>
-                </div>
-                <div className="mt-6 pt-3 border-t border-white/6 flex items-center gap-1.5 text-[11px] font-mono text-slate-500">
-                  <span className="h-1.5 w-1.5 rounded-full bg-aqua-400" />
-                  <span>Phase Milestone</span>
-                </div>
-              </SpotlightCard>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Why Novaframe (Trust & Standards)                                  */
-/* ------------------------------------------------------------------ */
-function WhyUs() {
-  return (
-    <section className="relative border-y border-white/8 bg-ink-900/40 py-24 md:py-32">
-      <Glow className="-top-12 right-0 h-80 w-80" color="rgba(6,182,212,0.18)" />
-      <div className="shell relative">
-        <Reveal>
-          <SectionHeading
-            eyebrow="Why Clients Choose Us"
-            title="Direct senior talent with"
-            highlight="enterprise-grade rigor."
-            description="We bridge the gap between slow, bureaucratic big agencies and chaotic freelancers. You get clean engineering and founder-level accountability."
-          />
+                    <Icon name="arrow-up-right" className="h-4 w-4 shrink-0 text-smoke transition group-hover:text-gold-200" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
         </Reveal>
 
-        <div className="mt-16 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {whyChooseUs.map((w, i) => (
-            <Reveal key={w.title} delay={i * 70}>
-              <SpotlightCard className="h-full p-7">
-                <span className="grid h-12 w-12 place-items-center rounded-xl border border-white/12 bg-white/[0.04] text-aqua-400">
-                  <Icon name={w.icon} className="h-5 w-5" />
-                </span>
-                <h3 className="font-display mt-6 text-[17px] font-bold text-white">{w.title}</h3>
-                <p className="mt-2.5 text-[14.5px] leading-relaxed text-slate-400">{w.desc}</p>
-              </SpotlightCard>
-            </Reveal>
-          ))}
-        </div>
+        <Reveal delay={100}>
+          <div className="mt-20">
+            <p className="label mb-6 text-center">How we compare</p>
+            <Comparison />
+          </div>
+        </Reveal>
 
-        {/* Credentials Strip */}
-        <Reveal delay={160}>
-          <div className="glass-card mt-10 grid gap-px overflow-hidden rounded-3xl bg-white/[0.07] sm:grid-cols-2 lg:grid-cols-3">
-            {credentials.map((c) => (
-              <div key={c.title} className="group bg-ink-950/80 p-6 transition hover:bg-white/[0.04]">
-                <div className="flex items-start gap-3.5">
-                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-aqua-500 text-white shadow-md">
-                    <Icon name="check" className="h-3 w-3" />
-                  </span>
-                  <div>
-                    <p className="font-display text-[14.5px] font-bold text-white">{c.title}</p>
-                    <p className="mt-1 text-[13px] leading-relaxed text-slate-400">{c.desc}</p>
-                  </div>
+        <Reveal delay={120}>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {collections.guarantees.map((g) => (
+              <div key={g.id} className="lux-inset flex items-start gap-4 rounded-2xl p-5">
+                <IconTile name={g.icon} size="sm" />
+                <div>
+                  <p className="text-[14.5px] font-semibold text-ivory">{g.title}</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-mist">{g.desc}</p>
                 </div>
               </div>
             ))}
@@ -563,48 +471,166 @@ function WhyUs() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Testimonials                                                       */
+/* Process                                                            */
 /* ------------------------------------------------------------------ */
-function Testimonials() {
+function ProcessSection() {
+  const { collections } = useContent();
+  const steps = collections.process;
   return (
-    <section className="py-24 md:py-32">
+    <section className="relative border-y border-gold-300/[0.07] bg-ink-900/50 py-28 md:py-36">
       <div className="shell">
         <Reveal>
           <SectionHeading
-            eyebrow="Founder Testimonials"
-            title="Real feedback from leaders"
-            highlight="who launched with us."
+            index="04"
+            eyebrow="How we work"
+            title="From first call to launch —"
+            highlight="in writing, every step."
+            description="Predictable deliverables, a live demo every week and a shared board you can check any time."
           />
         </Reveal>
-        <div className="mt-16 grid gap-6 md:grid-cols-3">
-          {testimonials.map((t, i) => (
-            <Reveal key={t.name} delay={i * 90}>
-              <SpotlightCard className="flex h-full flex-col justify-between p-7">
+
+        <div className="relative mt-20">
+          <div className="absolute top-[27px] right-[10%] left-[10%] hidden h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent lg:block" aria-hidden />
+          <ol className="grid gap-10 lg:gap-6" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(190px, 1fr))` }}>
+            {steps.map((s, i) => (
+              <Reveal key={s.id} as="li" delay={i * 90} className="relative text-left lg:text-center">
+                <div className="flex items-center gap-4 lg:flex-col lg:gap-0">
+                  <span className="relative z-[1] grid h-14 w-14 shrink-0 place-items-center rounded-full border border-gold-300/40 bg-ink-950 font-display text-[1.15rem] text-gold-200 shadow-[0_0_0_6px_rgba(8,7,6,1)]">
+                    {s.step}
+                  </span>
+                  <span className="chip lg:mt-6">{s.duration}</span>
+                </div>
+                <h3 className="mt-5 text-[17px] font-semibold text-ivory">{s.title}</h3>
+                <p className="mt-2 text-[14px] leading-relaxed text-mist lg:mx-auto lg:max-w-[230px]">{s.desc}</p>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
+
+        <Reveal delay={120}>
+          <div className="mt-20 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {collections.rhythm.map((r) => (
+              <div key={r.id} className="lux-card p-6">
+                <Icon name={r.icon} className="h-5 w-5 text-gold-300" />
+                <p className="mt-4 text-[15px] font-semibold text-ivory">{r.title}</p>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-mist">{r.desc}</p>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Estimator                                                          */
+/* ------------------------------------------------------------------ */
+function EstimatorSection() {
+  return (
+    <section id="estimator" className="relative scroll-mt-28 py-28 md:py-36">
+      <div className="shell">
+        <Reveal>
+          <SectionHeading
+            index="05"
+            eyebrow="Instant estimate"
+            title="Know the ballpark"
+            highlight="before you call."
+            description="Most studios hide pricing behind a form. Tell us what you're building and see a transparent range and timeline — then turn it into a fixed quote."
+          />
+        </Reveal>
+        <Reveal delay={120} className="mt-14">
+          <Estimator />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Founder                                                            */
+/* ------------------------------------------------------------------ */
+function FounderSection() {
+  const { collections, settings } = useContent();
+  const founder = collections.team[0];
+  if (!founder) return null;
+  return (
+    <section className="relative overflow-hidden border-y border-gold-300/[0.07] bg-ink-900/50 py-28 md:py-36">
+      <div className="shell grid items-center gap-14 lg:grid-cols-[0.85fr_1.15fr] lg:gap-20">
+        <Reveal>
+          <div className="relative mx-auto w-full max-w-[420px]">
+            <div className="gold-edge relative aspect-[4/5] overflow-hidden rounded-t-[999px] rounded-b-[28px] bg-ink-850">
+              {founder.photo ? (
+                <img src={founder.photo} alt={`${founder.name}, ${founder.role}`} className="h-full w-full object-cover object-[50%_30%]" loading="lazy" />
+              ) : (
+                <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>
+              )}
+              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-ink-950/90 to-transparent" />
+              <div className="absolute inset-x-6 bottom-6 flex items-end justify-between">
                 <div>
-                  <div className="flex gap-1 text-amber-300">
-                    {Array.from({ length: 5 }).map((_, k) => (
-                      <svg key={k} viewBox="0 0 24 24" className="h-4 w-4 fill-current">
-                        <path d="m12 2 2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8L12 2Z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <p className="mt-5 text-[15px] leading-relaxed text-slate-200">"{t.quote}"</p>
+                  <p className="display text-[1.6rem] leading-none">{founder.name}</p>
+                  <p className="mt-1.5 text-[12.5px] text-gold-200">{founder.role}</p>
                 </div>
-                <div className="mt-8 flex items-center gap-3.5 border-t border-white/8 pt-5">
-                  <img
-                    src={t.avatar}
-                    alt={t.name}
-                    loading="lazy"
-                    className="h-11 w-11 rounded-full object-cover ring-2 ring-brand-400/30"
-                  />
-                  <div>
-                    <p className="font-display text-[14px] font-bold text-white">{t.name}</p>
-                    <p className="text-[12px] text-slate-400">{t.role}</p>
-                  </div>
-                </div>
-              </SpotlightCard>
+                <span className="chip">
+                  <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" /> {founder.location ?? settings.city}
+                </span>
+              </div>
+            </div>
+            <Seal size={128} className="absolute -top-6 -right-6 hidden sm:block" />
+          </div>
+        </Reveal>
+
+        <div>
+          <Reveal>
+            <SectionHeading align="left" index="06" eyebrow="Meet the founder" title="The person who answers" highlight="is the person who builds." size="md" />
+          </Reveal>
+          <Reveal delay={90}>
+            <p className="mt-7 text-[16px] leading-relaxed text-sand">{founder.bio}</p>
+          </Reveal>
+          {founder.quote ? (
+            <Reveal delay={150}>
+              <blockquote className="relative mt-8 border-l border-gold-400/60 pl-6">
+                <p className="display serif-accent text-[1.4rem] leading-snug text-gold-100">“{founder.quote}”</p>
+              </blockquote>
             </Reveal>
-          ))}
+          ) : null}
+          {founder.credentials?.length ? (
+            <Reveal delay={200}>
+              <ul className="mt-9 grid gap-3 sm:grid-cols-2">
+                {founder.credentials.map((c) => (
+                  <li key={c.title} className="flex items-start gap-3">
+                    <Icon name="award" className="mt-0.5 h-4 w-4 shrink-0 text-gold-300" />
+                    <span>
+                      <span className="block text-[13.5px] font-semibold text-parchment">{c.title}</span>
+                      <span className="block text-[12px] text-smoke">
+                        {c.org}
+                        {c.year ? ` · ${c.year}` : ""}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          ) : null}
+          <Reveal delay={250}>
+            <div className="mt-10 flex flex-wrap items-center gap-3">
+              <Button to="/book" arrow track="founder_book">
+                Book a call with {founder.name.split(" ")[0]}
+              </Button>
+              {founder.links.map((l) => (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full border border-gold-300/20 px-4 py-2.5 text-[13px] font-semibold text-parchment transition hover:border-gold-300/60 hover:text-gold-200"
+                >
+                  <Icon name={l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase()} className="h-4 w-4" />
+                  {l.label}
+                </a>
+              ))}
+            </div>
+          </Reveal>
         </div>
       </div>
     </section>
@@ -612,55 +638,36 @@ function Testimonials() {
 }
 
 /* ------------------------------------------------------------------ */
-/* FAQ Section                                                        */
+/* FAQ                                                                */
 /* ------------------------------------------------------------------ */
-function FaqSection() {
+function FaqSection({ index }: { index: string }) {
   return (
-    <section className="border-t border-white/8 bg-ink-900/40 py-24 md:py-32">
+    <section className="relative py-28 md:py-36">
       <div className="shell">
         <Reveal>
           <SectionHeading
-            eyebrow="Frequently Asked Questions"
-            title="Clear answers before"
-            highlight="we start any project."
-            description="Full transparency protects both parties. Here are the key questions regarding timelines, code ownership, and support."
+            index={index}
+            eyebrow="Questions"
+            title="Everything you'd ask"
+            highlight="before starting."
+            description="Full transparency protects both sides — including the question about trusting a young studio."
           />
         </Reveal>
         <Reveal delay={120} className="mt-14">
-          <Faq />
+          <Faq limit={6} />
         </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Bottom Call to Action Banner                                       */
-/* ------------------------------------------------------------------ */
-function CtaBand() {
-  return (
-    <section className="py-24 md:py-28">
-      <div className="shell">
-        <Reveal>
-          <div className="grad-border relative overflow-hidden rounded-[36px] bg-gradient-to-br from-brand-600/35 via-ink-850 to-aqua-500/20 p-8 md:p-16 shadow-2xl">
-            <div className="grid-bg absolute inset-0 opacity-40 pointer-events-none" aria-hidden />
-            <Glow className="-bottom-28 -right-12 h-80 w-80" color="rgba(34,211,238,0.25)" />
-            <div className="relative flex flex-col items-start gap-8 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-2xl">
-                <Eyebrow tone="aqua">Ready to launch</Eyebrow>
-                <h2 className="font-display mt-4 text-3xl leading-tight font-extrabold tracking-tight text-white sm:text-4xl md:text-[2.6rem]">
-                  Let's bring your product to market with zero delays.
-                </h2>
-                <p className="mt-4 text-[16px] leading-relaxed text-slate-300">
-                  Send a brief overview of your goals. You'll receive a detailed written roadmap, verified scope, and a fixed milestone quote within {company.responseTime.toLowerCase()}.
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col gap-3.5 sm:flex-row">
-                <PrimaryButton to="/contact">Start a Project</PrimaryButton>
-                <GhostButton to="/portfolio">Explore Work</GhostButton>
-              </div>
-            </div>
-          </div>
+        <Reveal delay={160}>
+          <p className="mt-10 text-center text-[14px] text-mist">
+            Still curious?{" "}
+            <Link to="/pricing" className="font-semibold text-gold-200 underline-offset-4 hover:underline">
+              See every answer
+            </Link>{" "}
+            or{" "}
+            <Link to="/contact" className="font-semibold text-gold-200 underline-offset-4 hover:underline">
+              ask us directly
+            </Link>
+            .
+          </p>
         </Reveal>
       </div>
     </section>
@@ -668,17 +675,21 @@ function CtaBand() {
 }
 
 export default function Home() {
+  const { collections } = useContent();
+  const hasTestimonials = collections.testimonials.length > 0;
   return (
     <>
       <Hero />
-      <ClientStrip />
-      <Capabilities />
-      <FeaturedWork />
-      <Process />
+      <ProofStrip />
+      <ServicesSection />
+      <SelectedWork />
       <WhyUs />
-      <Testimonials />
-      <FaqSection />
-      <CtaBand />
+      <ProcessSection />
+      <EstimatorSection />
+      <FounderSection />
+      <FoundingProgram />
+      <Testimonials index="07" />
+      <FaqSection index={hasTestimonials ? "08" : "07"} />
     </>
   );
 }
