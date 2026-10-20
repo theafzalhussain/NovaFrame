@@ -1,0 +1,37 @@
+# Render blueprint — one Node web service that builds the site and serves it + the /api backend.
+# Render reads this automatically when you create a "Blueprint" from the repo.
+# Secrets (SMTP, Razorpay, admin password) are NOT put here — add them in the dashboard.
+services:
+  - type: web
+    name: novaframe
+    runtime: node
+    plan: free
+    region: singapore # closest to India; change if you prefer
+    branch: main
+    # devDependencies are needed: the build runs Vite and the server runs through tsx.
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    # Persistent storage so the SQLite database survives restarts and deploys.
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      - key: DB_PATH
+        value: /data/novaframe.db
+      - key: TRUST_PROXY
+        value: "1"
+      - key: TZ_OFFSET_MINUTES
+        value: "330"
+      - key: PAYMENT_CURRENCY
+        value: INR
+      - key: SEND_CONFIRMATIONS
+        value: "true"
+      # --- Set these in the Render dashboard (Environment tab), not here ---
+      # ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_NAME
+      # SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, MAIL_FROM, NOTIFY_EMAIL
+      # RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+      # CORS_ORIGIN, SITE_URL

@@ -16,7 +16,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p server",
-    "start": "npm run build && tsx server/index.ts"
+    "start": "npm run build && tsx server/index.ts",
+    "start:prod": "tsx server/index.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
