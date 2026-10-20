@@ -881,6 +881,33 @@
     height: 1px;
     background: #d4ad66;
   }
+
+  /* ---------- Confirmation seal ---------- */
+  .seal-pop {
+    animation: seal-pop 0.9s var(--ease) both;
+  }
+  .seal-ring {
+    animation: seal-ring 3.2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  }
+  .seal-ring-delay {
+    animation-delay: 1.6s;
+  }
+  .check-draw path {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    animation: check-draw 0.7s 0.45s var(--ease) forwards;
+  }
+
+  /* ---------- Busy spinner ---------- */
+  .spinner {
+    display: inline-block;
+    width: 1.1em;
+    height: 1.1em;
+    border-radius: 9999px;
+    border: 2px solid rgba(227, 200, 140, 0.25);
+    border-top-color: #e3c88c;
+    animation: spin 0.8s linear infinite;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -990,6 +1017,35 @@
     transform: none;
   }
 }
+@keyframes seal-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes seal-ring {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.82);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+@keyframes check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Reduced motion                                                     */
@@ -1020,5 +1076,56 @@
   .gold-orbit::after,
   .shine:hover::after {
     animation: none;
+  }
+  .seal-pop {
+    animation: none;
+  }
+  .seal-ring {
+    display: none;
+  }
+  .check-draw path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Print — receipts / confirmations print as a clean light document   */
+/* ------------------------------------------------------------------ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  html.has-receipt #root > div > :not(main) {
+    display: none !important;
+  }
+  .print-area {
+    margin: 0 !important;
+    border: 1px solid #d8d0bf !important;
+    border-radius: 14px !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  .print-area::before {
+    display: none !important;
+  }
+  .print-area,
+  .print-area * {
+    color: #1d1913 !important;
+    -webkit-text-fill-color: currentColor !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  .print-area * {
+    background: transparent !important;
+    border-color: #e6dfd1 !important;
+  }
+  .print-area .print-gold {
+    color: #7c5c2e !important;
   }
 }

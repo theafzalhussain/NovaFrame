@@ -25,7 +25,8 @@ import {
   type SiteSettings,
 } from "../src/data/types.js";
 import { defaultContent } from "../src/data/defaults.js";
-import { mailEnabled, notifyBooking, notifyLead } from "./mailer.js";
+import { mailEnabled, notifyBooking, notifyLead, notifyPayment, verifyMail, type MailContext } from "./mailer.js";
+import Razorpay from "razorpay";
 import {
   TZ_MOD,
   contentQ,
@@ -55,7 +56,15 @@ const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .map((o) => o.trim())
   .filter(Boolean);
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, maxAge: 86_400 }));
-app.use(express.json({ limit: "512kb" }));
+app.use(
+  express.json({
+    limit: "512kb",
+    // Razorpay webhooks are signed over the exact raw bytes, so keep them for that one route.
+    verify: (req, _res, buf) => {
+      if (req.url?.startsWith("/api/payments/webhook")) (req as RawBodyRequest).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -68,6 +77,7 @@ app.use((_req, res, next) => {
 /* ------------------------------------------------------------------ */
 type AdminUser = { id: number; email: string; fullName: string; role: AdminRole; sessionId: number };
 type AuthedRequest = Request & { admin?: AdminUser };
+type RawBodyRequest = Request & { rawBody?: Buffer };
 
 const ok = (res: Response, data: unknown = null, status = 200) => res.status(status).json({ ok: true, data });
 const fail = (res: Response, status: number, error: string, extra?: Record<string, unknown>) =>
@@ -91,6 +101,15 @@ function deepMerge<T>(base: T, override: unknown): T {
 
 const siteSettings = () => deepMerge(defaultContent.settings, readSetting<SiteSettings>("site"));
 const advancedSettings = () => deepMerge(defaultContent.advanced, readSetting<AdvancedSettings>("advanced"));
+
+/** Public site URL for links inside emails (optional, e.g. https://novaframe.studio). */
+const SITE_URL = /^https?:\/\//i.test(process.env.SITE_URL ?? "") ? (process.env.SITE_URL as string).replace(/\/+$/, "") : undefined;
+
+/** Branding + signature used by every outgoing email. */
+function mailContext(): MailContext {
+  const founder = (contentQ.listPublished.all("team") as ContentRow[]).map((row) => parseRow(row).data as { name?: string; role?: string })[0];
+  return { settings: siteSettings(), founder: founder?.name ? { name: founder.name, role: founder.role } : undefined, siteUrl: SITE_URL };
+}
 
 /** yyyy-mm-dd for "now + offsetDays" in an IANA timezone */
 function dateInTz(timeZone: string, offsetDays = 0) {
@@ -262,8 +281,8 @@ app.post("/api/enquiries", formLimiter, (req, res) => {
     source: (str(b.source, 30).replace(/[^a-z_-]/gi, "") || "contact").toLowerCase(),
   };
   insertEnquiry.run({ ...lead, value: estimateValue(budget), ip: ipOf(req), ua: uaOf(req) });
-  notifyLead(lead, siteSettings()).catch((err) => console.error("[mail] lead notification failed:", (err as Error).message));
-  ok(res, { reference, message: "Enquiry received. We reply within 12 business hours." }, 201);
+  notifyLead(lead, mailContext()).catch((err) => console.error("[mail] lead notification failed:", (err as Error).message));
+  ok(res, { reference, message: "Enquiry received. We reply within 12 business hours.", mail: mailEnabled() }, 201);
 });
 
 app.get("/api/bookings/availability", (req, res) => {
@@ -356,10 +375,14 @@ app.post("/api/bookings", formLimiter, (req, res) => {
     }
     throw err;
   }
-  notifyBooking({ reference, name, email, phone, company, topic, date, time, notes }, settings).catch((err) =>
+  notifyBooking({ reference, name, email, phone, company, topic, budget, date, time, notes }, mailContext()).catch((err) =>
     console.error("[mail] booking notification failed:", (err as Error).message),
   );
-  ok(res, { reference, date, time, timezone: settings.timezoneLabel, durationMinutes: settings.booking.durationMinutes }, 201);
+  ok(
+    res,
+    { reference, date, time, timezone: settings.timezoneLabel, durationMinutes: settings.booking.durationMinutes, mail: mailEnabled() },
+    201,
+  );
 });
 
 app.post("/api/subscribe", subscribeLimiter, (req, res) => {
@@ -387,7 +410,294 @@ app.post("/api/events", eventLimiter, (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Admin — authentication                                             */
+/* Public API — Payments (Razorpay)                                   */
+/* ------------------------------------------------------------------ */
+let razorpayClient: Razorpay | null | undefined;
+function getRazorpay(): Razorpay | null {
+  if (razorpayClient !== undefined) return razorpayClient;
+  const key_id = process.env.RAZORPAY_KEY_ID;
+  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+  razorpayClient = key_id && key_secret ? new Razorpay({ key_id, key_secret }) : null;
+  return razorpayClient;
+}
+const paymentsEnabled = () => Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+const paymentsTestMode = () => (process.env.RAZORPAY_KEY_ID ?? "").startsWith("rzp_test_");
+const PAYMENT_CURRENCY = (process.env.PAYMENT_CURRENCY || "INR").toUpperCase();
+const paymentLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20 });
+
+type PaymentRow = {
+  id: number;
+  reference: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string | null;
+  name: string;
+  email: string;
+  phone: string | null;
+  company_name: string | null;
+  purpose: string;
+  amount: number;
+  currency: string;
+  status: "created" | "paid" | "failed";
+  method: string | null;
+  paid_at: string | null;
+  enquiry_id: number | null;
+};
+
+const paymentQ = {
+  insert: db.prepare(`
+    INSERT INTO payments (reference, razorpay_order_id, name, email, phone, company_name, purpose, amount, currency, enquiry_id, ip_address, user_agent)
+    VALUES (@reference, @orderId, @name, @email, @phone, @company, @purpose, @amount, @currency, @enquiryId, @ip, @ua)
+  `),
+  byOrder: db.prepare("SELECT * FROM payments WHERE razorpay_order_id = ?"),
+  // Only the first successful confirmation flips the row — that caller sends the emails.
+  markPaid: db.prepare(`
+    UPDATE payments SET status = 'paid', razorpay_payment_id = @paymentId, method = coalesce(@method, method),
+      paid_at = datetime('now'), updated_at = datetime('now')
+    WHERE razorpay_order_id = @orderId AND status != 'paid'
+  `),
+  setMethod: db.prepare("UPDATE payments SET method = ?, updated_at = datetime('now') WHERE razorpay_order_id = ? AND method IS NULL"),
+  leadPaid: db.prepare("UPDATE enquiries SET project_details = ?, updated_at = datetime('now') WHERE id = ?"),
+  leadNote: db.prepare("INSERT INTO enquiry_notes (enquiry_id, admin_name, kind, body) VALUES (?, 'Razorpay', 'payment', ?)"),
+};
+
+const METHOD_LABELS: Record<string, string> = {
+  upi: "UPI",
+  card: "Card",
+  netbanking: "Net banking",
+  wallet: "Wallet",
+  emi: "EMI",
+  cardless_emi: "Cardless EMI",
+  paylater: "Pay Later",
+  bank_transfer: "Bank transfer",
+};
+
+const hmacHex = (secret: string, data: string | Buffer) => crypto.createHmac("sha256", secret).update(data).digest("hex");
+function sameHex(expected: string, received: string) {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms).unref())]);
+}
+
+/**
+ * Best effort: read the payment from Razorpay for the receipt (method, bank/wallet) and
+ * capture it if the account is set to manual capture — uncaptured payments are auto-refunded.
+ */
+async function inspectPayment(paymentId: string, row: PaymentRow): Promise<string | null> {
+  const rp = getRazorpay();
+  if (!rp) return null;
+  try {
+    let payment = await withTimeout(rp.payments.fetch(paymentId), 8000);
+    if (payment.order_id && payment.order_id !== row.razorpay_order_id) {
+      console.warn(`[payment] ${paymentId} belongs to ${payment.order_id}, not ${row.razorpay_order_id}`);
+      return null;
+    }
+    if (payment.status === "authorized") {
+      payment = await withTimeout(rp.payments.capture(paymentId, row.amount * 100, row.currency), 8000);
+      console.log(`[payment] captured ${paymentId}`);
+    }
+    const label = METHOD_LABELS[payment.method] ?? payment.method;
+    // Wallet names read well ("Paytm"); net-banking bank codes ("UTIB") don't, so they're left out.
+    const wallet = payment.method === "wallet" && payment.wallet ? payment.wallet.replace(/^\w/, (c) => c.toUpperCase()) : "";
+    return wallet ? `${label} · ${wallet}` : label || null;
+  } catch (err) {
+    const e = err as { message?: string; error?: { description?: string } };
+    console.warn(`[payment] couldn't inspect ${paymentId}:`, e.error?.description ?? e.message);
+    return null;
+  }
+}
+
+const isoUtc = (sqlite: string | null) => (sqlite ? `${sqlite.replace(" ", "T")}Z` : new Date().toISOString());
+
+/** Marks an order paid (idempotent). The first caller logs it on the lead and sends the emails. */
+async function settlePayment(orderId: string, paymentId: string): Promise<PaymentRow | null> {
+  const row = paymentQ.byOrder.get(orderId) as PaymentRow | undefined;
+  if (!row) return null;
+  const method = row.status === "paid" && row.method ? row.method : await inspectPayment(paymentId, row);
+  const first = paymentQ.markPaid.run({ orderId, paymentId, method }).changes === 1;
+  if (!first && method) paymentQ.setMethod.run(method, orderId);
+  const fresh = paymentQ.byOrder.get(orderId) as PaymentRow;
+
+  if (first) {
+    const amountLabel = `${fresh.currency} ${fresh.amount.toLocaleString("en-IN")}`;
+    if (fresh.enquiry_id) {
+      paymentQ.leadPaid.run(
+        `Online payment received: ${amountLabel} for "${fresh.purpose}"${method ? ` via ${method}` : ""}. Receipt ${fresh.reference} · Razorpay ${paymentId}.`,
+        fresh.enquiry_id,
+      );
+      paymentQ.leadNote.run(fresh.enquiry_id, `Payment received — ${amountLabel}${method ? ` via ${method}` : ""} · ${paymentId}${paymentsTestMode() ? " (test mode)" : ""}`);
+    }
+    console.log(`[payment] ${fresh.reference} paid — ${amountLabel} (${paymentId})`);
+    notifyPayment(
+      {
+        reference: fresh.reference,
+        name: fresh.name,
+        email: fresh.email,
+        phone: fresh.phone ?? undefined,
+        company: fresh.company_name ?? undefined,
+        purpose: fresh.purpose,
+        amount: fresh.amount,
+        currency: fresh.currency,
+        paymentId,
+        orderId,
+        method: fresh.method,
+        paidAt: new Date(isoUtc(fresh.paid_at)),
+        testMode: paymentsTestMode(),
+      },
+      mailContext(),
+    ).catch((err) => console.error("[mail] payment emails failed:", (err as Error).message));
+  }
+  return fresh;
+}
+
+const receiptOf = (row: PaymentRow) => ({
+  reference: row.reference,
+  paymentId: row.razorpay_payment_id ?? "",
+  orderId: row.razorpay_order_id,
+  amount: row.amount,
+  currency: row.currency,
+  purpose: row.purpose,
+  name: row.name,
+  email: row.email,
+  phone: row.phone ?? "",
+  companyName: row.company_name ?? "",
+  method: row.method,
+  paidAt: isoUtc(row.paid_at),
+  testMode: paymentsTestMode(),
+  mail: mailEnabled(),
+});
+
+/** Public config so the frontend knows whether to show the checkout. */
+app.get("/api/payments/config", (_req, res) => {
+  ok(res, { enabled: paymentsEnabled(), keyId: process.env.RAZORPAY_KEY_ID ?? "", currency: PAYMENT_CURRENCY, testMode: paymentsTestMode() });
+});
+
+/** Step 1 — create a Razorpay order (amount is validated server-side). */
+app.post("/api/payments/order", paymentLimiter, async (req, res) => {
+  const rp = getRazorpay();
+  if (!rp) return fail(res, 503, "Online payments aren't configured yet. Please contact us to pay.");
+
+  const b = req.body ?? {};
+  if (str(b.website, 200)) return fail(res, 400, "Invalid request."); // honeypot
+
+  const name = str(b.name, 120);
+  const email = str(b.email, 160).toLowerCase();
+  const purpose = str(b.purpose, 160) || "Payment to Novaframe Studio";
+  // Amount arrives in major units (rupees). Clamp to a sane range.
+  const rupees = Math.round(Number(b.amount));
+  const errors: Record<string, string> = {};
+  if (name.length < 2) errors.name = "Please enter your name.";
+  if (!isEmail(email)) errors.email = "Please enter a valid email address.";
+  if (!Number.isFinite(rupees) || rupees < 1) errors.amount = "Please enter a valid amount.";
+  if (rupees > 5_000_000) errors.amount = "That amount is too large — please contact us for large invoices.";
+  if (Object.keys(errors).length) return fail(res, 422, "Please check the highlighted fields.", { errors });
+
+  const reference = newReference("NFP");
+  const amountPaise = rupees * 100; // Razorpay works in the smallest currency unit
+  const company = str(b.companyName, 160);
+  const phone = str(b.phone, 40);
+
+  try {
+    const order = await rp.orders.create({
+      amount: amountPaise,
+      currency: PAYMENT_CURRENCY,
+      receipt: reference,
+      notes: { reference, name, email, purpose },
+    });
+
+    // Record a lead so every payer shows up in the admin CRM, then the payment row.
+    const enquiry = insertEnquiry.run({
+      reference: newReference("NF"),
+      name,
+      company,
+      email,
+      phone,
+      service: `Payment — ${purpose}`,
+      budget: `${PAYMENT_CURRENCY} ${rupees.toLocaleString("en-IN")}`,
+      timeline: "",
+      details: `Online payment started for "${purpose}" (${PAYMENT_CURRENCY} ${rupees.toLocaleString("en-IN")}) — not completed yet. Receipt ${reference}.`,
+      source: "payment",
+      value: rupees,
+      ip: ipOf(req),
+      ua: uaOf(req),
+    });
+
+    paymentQ.insert.run({
+      reference,
+      orderId: order.id,
+      name,
+      email,
+      phone,
+      company,
+      purpose,
+      amount: rupees,
+      currency: PAYMENT_CURRENCY,
+      enquiryId: Number(enquiry.lastInsertRowid),
+      ip: ipOf(req),
+      ua: uaOf(req),
+    });
+
+    ok(res, {
+      reference,
+      orderId: order.id,
+      amount: amountPaise,
+      currency: PAYMENT_CURRENCY,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      name,
+      email,
+      phone,
+      testMode: paymentsTestMode(),
+    }, 201);
+  } catch (err) {
+    const e = err as { message?: string; error?: { description?: string } };
+    console.error("[payment] order creation failed:", e.error?.description ?? e.message);
+    fail(res, 502, "Couldn't start the payment. Please try again in a moment.");
+  }
+});
+
+/** Step 2 — the browser hands back Razorpay's signed result; we verify it before confirming. */
+app.post("/api/payments/verify", paymentLimiter, async (req, res) => {
+  if (!paymentsEnabled()) return fail(res, 503, "Payments aren't configured.");
+  const orderId = str(req.body?.razorpay_order_id, 120);
+  const paymentId = str(req.body?.razorpay_payment_id, 120);
+  const signature = str(req.body?.razorpay_signature, 200);
+  if (!orderId || !paymentId || !signature) return fail(res, 400, "Missing payment details.");
+
+  if (!paymentQ.byOrder.get(orderId)) return fail(res, 404, "We couldn't find this order. Please contact us with your payment ID.");
+
+  // HMAC-SHA256(order_id|payment_id) keyed with the secret proves Razorpay approved this payment.
+  if (!sameHex(hmacHex(process.env.RAZORPAY_KEY_SECRET as string, `${orderId}|${paymentId}`), signature)) {
+    console.warn(`[payment] signature mismatch for ${orderId} / ${paymentId}`);
+    return fail(res, 400, "We couldn't verify this payment. If money was deducted, it will be refunded automatically — please contact us.");
+  }
+
+  const row = await settlePayment(orderId, paymentId);
+  if (!row) return fail(res, 404, "Unknown order.");
+  ok(res, receiptOf(row));
+});
+
+/**
+ * Optional safety net — Razorpay calls this even if the visitor closes the tab right after paying.
+ * Dashboard → Webhooks: URL https://<your-domain>/api/payments/webhook, events payment.captured + order.paid,
+ * and the same secret in RAZORPAY_WEBHOOK_SECRET.
+ */
+app.post("/api/payments/webhook", async (req: RawBodyRequest, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret || !paymentsEnabled()) return fail(res, 404, "Route not found.");
+  const signature = String(req.headers["x-razorpay-signature"] ?? "");
+  if (!req.rawBody || !signature || !sameHex(hmacHex(secret, req.rawBody), signature)) {
+    return fail(res, 400, "Invalid webhook signature.");
+  }
+  const event = str(req.body?.event, 60);
+  const payment = req.body?.payload?.payment?.entity as { id?: string; order_id?: string } | undefined;
+  if (["payment.captured", "payment.authorized", "order.paid"].includes(event) && payment?.id && payment.order_id) {
+    await settlePayment(payment.order_id, payment.id);
+  }
+  ok(res, { received: true });
+});
 /* ------------------------------------------------------------------ */
 const userQ = {
   byEmail: db.prepare("SELECT * FROM admin_users WHERE email = ?"),
@@ -1052,7 +1362,15 @@ app.use((err: Error & { type?: string; status?: number }, _req: Request, res: Re
 app.listen(PORT, () => {
   console.log(`\n  > Novaframe API ready:  http://localhost:${PORT}/api/health`);
   console.log(`  > Admin console:       http://localhost:5173/#/admin (dev) or this server's /#/admin`);
-  console.log(`  > Email notifications: ${mailEnabled() ? "on (SMTP)" : "off (set SMTP_HOST to enable)"}\n`);
+  console.log(`  > Email notifications: ${mailEnabled() ? "on (SMTP)" : "off (set SMTP_HOST to enable)"}`);
+  console.log(`  > Online payments:     ${paymentsEnabled() ? `on (Razorpay ${paymentsTestMode() ? "TEST" : "LIVE"} mode)` : "off (set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)"}\n`);
+  if (mailEnabled()) {
+    void verifyMail().then((r) =>
+      r.ok
+        ? console.log(`  > SMTP login verified (${process.env.SMTP_HOST})`)
+        : console.error(`  > SMTP login FAILED — emails will not be delivered: ${r.error}`),
+    );
+  }
 });
 
 export default app;

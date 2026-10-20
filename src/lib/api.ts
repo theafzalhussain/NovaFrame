@@ -126,16 +126,71 @@ export type BookingPayload = {
   website?: string; // honeypot
 };
 
+export type PaymentOrderPayload = {
+  name: string;
+  email: string;
+  phone?: string;
+  companyName?: string;
+  purpose: string;
+  amount: number; // in rupees (major unit)
+  website?: string; // honeypot
+};
+
+export type PaymentOrder = {
+  reference: string;
+  orderId: string;
+  amount: number; // paise
+  currency: string;
+  keyId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  testMode?: boolean;
+};
+
+export type PaymentVerifyPayload = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
+export type PaymentReceipt = {
+  reference: string;
+  paymentId: string;
+  orderId: string;
+  amount: number; // rupees
+  currency: string;
+  purpose: string;
+  name: string;
+  email: string;
+  phone?: string;
+  companyName?: string;
+  /** e.g. "UPI" or "Net banking · HDFC" (null if Razorpay didn't report it in time) */
+  method?: string | null;
+  paidAt: string; // ISO
+  testMode?: boolean;
+  /** true when the server has email configured (a receipt is on its way) */
+  mail?: boolean;
+};
+
+export type PaymentConfig = { enabled: boolean; keyId: string; currency: string; testMode?: boolean };
+
 export const api = {
   health: () => request<{ service: string }>("GET", "/health", undefined, { fallback: false, timeoutMs: 4000 }),
   content: () => request<SiteContent & { version?: string }>("GET", "/content"),
-  submitEnquiry: (payload: EnquiryPayload) => request<{ reference: string; message: string }>("POST", "/enquiries", payload),
+  submitEnquiry: (payload: EnquiryPayload) =>
+    request<{ reference: string; message: string; mail?: boolean }>("POST", "/enquiries", payload),
   availability: (from: string, to: string) =>
     request<{ taken: Record<string, string[]> }>("GET", `/bookings/availability?from=${from}&to=${to}`),
   book: (payload: BookingPayload) =>
-    request<{ reference: string; date: string; time: string; timezone: string; durationMinutes: number }>("POST", "/bookings", payload),
+    request<{ reference: string; date: string; time: string; timezone: string; durationMinutes: number; mail?: boolean }>("POST", "/bookings", payload),
   subscribe: (email: string, source = "footer") =>
     request<{ subscribed: boolean; existing: boolean }>("POST", "/subscribe", { email, source }),
+  paymentConfig: () => request<PaymentConfig>("GET", "/payments/config", undefined, { fallback: false, timeoutMs: 6000 }),
+  createPaymentOrder: (payload: PaymentOrderPayload) =>
+    request<PaymentOrder>("POST", "/payments/order", payload, { fallback: false, timeoutMs: 15000 }),
+  verifyPayment: (payload: PaymentVerifyPayload) =>
+    request<PaymentReceipt>("POST", "/payments/verify", payload, { fallback: false, timeoutMs: 20000 }),
 };
 
 /* ------------------------------------------------------------------ */

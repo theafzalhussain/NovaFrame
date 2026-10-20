@@ -77,6 +77,7 @@ export default function Footer() {
     { label: "Tech stack", to: "/tech-stack" },
     { label: "Insights", to: "/insights" },
     { label: "Contact", to: "/contact" },
+    { label: "Pay online", to: "/pay" },
   ];
 
   return (

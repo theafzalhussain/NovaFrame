@@ -53,6 +53,7 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 | `npm start` | Build, then serve site **and** API from one Node process on `PORT` |
 | `npm run typecheck` | Strict TypeScript check for the web app and the server |
 | `npm run admin:reset -- --email … --password …` | Create an owner, or reset a password and sign out its sessions |
+| `npm run mail:test` | Log in to SMTP and send one sample of every email template to `NOTIFY_EMAIL` |
 | `npm run seed:php` | Regenerate `server/php/seed.json` from `src/data/defaults.ts` |
 
 ---
@@ -60,12 +61,14 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 ## What's inside
 
 **Website** (hash routes):
-- Pages: `/` · `/services` and `/services/:id` · `/work` and `/work/:id` (case studies) · `/pricing` · `/studio` · `/tech-stack` · `/insights` and `/insights/:id` · `/contact` · `/book` · `/privacy` · `/terms` · `/sitemap`
+- Pages: `/` · `/services` and `/services/:id` · `/work` and `/work/:id` (case studies) · `/pricing` · `/studio` · `/tech-stack` · `/insights` and `/insights/:id` · `/contact` · `/book` · `/pay` · `/confirmation` · `/privacy` · `/terms` · `/sitemap`
 - Unknown paths show a helpful 404.
 - **Real work:** eShopper, MovieZone, The Chronicle, World Explorer, the founder portfolio and SAARTHI, with live links, repos and screenshots.
 - **Conversion tools:**
   - Booking calendar with live availability and double-booking protection, plus `.ics` and Google Calendar links
   - Project brief form with honeypot and rate limits
+  - Online payments (`/pay`) through Razorpay Checkout — UPI, cards, net banking, wallets — with server-side signature verification
+  - Premium confirmation page (`/confirmation`) after every brief, booking and payment, with a printable receipt / acknowledgement
   - Price estimator and "why us" comparison table
   - Founding-client offer and WhatsApp links
   - `⌘K` command palette and quick-action dock
@@ -107,12 +110,22 @@ Copy `.env.example` → `.env` (git-ignored; `server/.env` also works). Every va
 | `SMTP_HOST` `SMTP_PORT` `SMTP_SECURE` `SMTP_USER` `SMTP_PASS` | — | Enables email notifications |
 | `MAIL_FROM` / `NOTIFY_EMAIL` | site email | Sender address, and the inbox that receives alerts |
 | `SEND_CONFIRMATIONS` | `true` | Set `false` to stop confirmation emails to clients |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | — | Enables online payments. `rzp_test_…` keys = test mode, `rzp_live_…` = real money |
+| `PAYMENT_CURRENCY` | `INR` | Currency for Razorpay orders |
+| `RAZORPAY_WEBHOOK_SECRET` | — | Optional. Enables `POST /api/payments/webhook` (see below) |
+| `SITE_URL` | — | Public site URL, used for "Book a call" and admin links inside emails |
 | `VITE_API_URL` | `/api` | Build-time API URL when the API is on another domain |
 | `API_PROXY_TARGET` | `http://localhost:4000` | Where `npm run dev` / `preview` proxy `/api` |
 
-**Email:** with `SMTP_HOST` set, each new enquiry or booked call sends you an alert (Reply-To is the client) and sends the client a branded confirmation.
-Sending runs in the background; a failed send is logged and never blocks the form. For Gmail, use an App Password.
-Email is only available in the Node edition.
+**Email:** with `SMTP_HOST` set, each new enquiry, booked call or payment sends you an alert (Reply-To is the client) and sends the client a branded confirmation — call bookings include a calendar invite, payments an official receipt.
+Sending runs in the background; a failed send is logged and never blocks the form. The server checks the SMTP login at start-up and logs the reason if it fails.
+With **Brevo**, use the SMTP tab's login and an SMTP key (`xsmtpsib-…`), make `MAIL_FROM` a verified sender, and authorise your server's IP under Settings → Security → Authorized IPs (otherwise Brevo answers `525 Unauthorized IP address`). For Gmail, use an App Password.
+Email and payments are only available in the Node edition.
+
+**Payments:** the browser asks the API to create a Razorpay order (the amount is fixed server-side), opens Razorpay Checkout, then sends the signed result to `/api/payments/verify`.
+The server checks the HMAC signature, captures the payment if the account uses manual capture, marks it paid, logs it on the payer's lead and sends the receipt. Every step is idempotent.
+For production, also add a webhook in Razorpay Dashboard → Webhooks (`https://<your-domain>/api/payments/webhook`, events `payment.captured` and `order.paid`) with the same secret as `RAZORPAY_WEBHOOK_SECRET` — it confirms payments even if the visitor closes the tab.
+Share pre-filled payment links like `/#/pay?amount=25000&for=Website%20advance`. To go live, complete Razorpay KYC and swap in the `rzp_live_` keys.
 
 **Content defaults:** `src/data/content.ts` and `src/data/content-extra.ts`, combined in `src/data/defaults.ts`, have three jobs:
 - seed a fresh database
@@ -165,6 +178,8 @@ Tokens are random, stored only as SHA-256 hashes, and can be revoked per session
 | `GET /api/bookings/availability?from=YYYY-MM-DD&to=YYYY-MM-DD` | public |
 | `POST /api/bookings`: returns 409 if the slot was just taken | public |
 | `POST /api/subscribe` · `POST /api/events` | public |
+| `GET /api/payments/config` · `POST /api/payments/order` · `POST /api/payments/verify`: rate-limited | public |
+| `POST /api/payments/webhook`: Razorpay-signed, only when `RAZORPAY_WEBHOOK_SECRET` is set | Razorpay |
 | `POST /api/admin/login`: 8 attempts per 15 minutes | public |
 | `GET /api/admin/me` · `POST /api/admin/logout` · `POST /api/admin/password` · `GET /api/admin/sessions` · `DELETE /api/admin/sessions/:id` | editor |
 | `GET`/`POST /api/admin/content/:collection` · `PUT`/`DELETE /api/admin/content/:collection/:id` · `POST /api/admin/content/:collection/reorder` | editor |
@@ -201,7 +216,8 @@ public/            brand mark, project screenshots, founder photo
 server/
   index.ts         Express API (public + admin routes, static dist serving)
   db.ts            SQLite schema, migrations, seeding, password + token hashing
-  mailer.ts        optional SMTP notifications
+  mailer.ts        SMTP email: branded templates for leads, bookings and payment receipts
+  mail-test.ts     `npm run mail:test` — sends a sample of every email
   reset-admin.ts   owner recovery CLI · export-seed.ts → php/seed.json
   php/             PHP 8 + MySQL edition (api.php, config.php, schema.sql, .htaccess, seed.json)
 src/

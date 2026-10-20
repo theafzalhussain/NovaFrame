@@ -56,6 +56,7 @@ export default function CommandPalette() {
       ...navLinks.map((l) => ({ id: `nav-${l.to}`, label: l.label, hint: "Page", icon: "arrow", run: go(l.to) })),
       { id: "tech", label: "Tech stack", hint: "Page", icon: "cpu", run: go("/tech-stack") },
       { id: "book", label: "Book a free 30-min call", hint: "Action", icon: "calendar", keywords: "meeting schedule discovery consultation", run: go("/book") },
+      { id: "pay", label: "Make a payment", hint: "Action", icon: "lock", keywords: "pay invoice advance milestone razorpay upi card", run: go("/pay") },
       {
         id: "estimate",
         label: "Estimate my project cost",

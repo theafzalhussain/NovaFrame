@@ -2,17 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BrandMark } from "../components/Brand";
 import { Icon } from "../components/Icons";
 import { StudioStatusPill } from "../components/StudioStatus";
-import { Button, Eyebrow, Reveal } from "../components/ui";
+import { Eyebrow, Reveal } from "../components/ui";
 import { api, track } from "../lib/api";
+import { confirmationPath, saveConfirmation } from "../lib/confirmation";
 import { useContent } from "../lib/content";
-import { upcomingWorkdays, whatsappLink } from "../lib/site";
-import { downloadIcs, googleCalendarUrl, zonedToUtc } from "../lib/time";
+import { useRouter } from "../lib/router";
+import { upcomingWorkdays } from "../lib/site";
+import { zonedToUtc } from "../lib/time";
 import { cn } from "../utils/cn";
-
-type Confirmed = { reference: string; date: string; time: string; offline: boolean };
 
 export default function BookCallPage() {
   const { settings, advanced, collections } = useContent();
+  const { navigate } = useRouter();
   const founder = collections.team[0];
   const days = useMemo(() => upcomingWorkdays(settings, Math.min(Math.max(settings.booking.daysAhead, 3), 12)), [settings]);
   const slots = settings.booking.slots;
@@ -24,7 +25,6 @@ export default function BookCallPage() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", companyName: "", topic: advanced.bookingTopics[0] ?? "", budget: "", notes: "", website: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [confirmed, setConfirmed] = useState<Confirmed | null>(null);
 
   const visitorTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   // Compare real offsets, not names ("Asia/Calcutta" and "Asia/Kolkata" are the same zone).
@@ -88,67 +88,25 @@ export default function BookCallPage() {
       return;
     }
     track("call_booked", { topic: form.topic });
-    setConfirmed({ reference: res.data?.reference ?? "", date: day, time, offline: Boolean(res.offline) });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const confirmation = {
+      kind: "booking" as const,
+      reference: res.data?.reference ?? "",
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      companyName: form.companyName.trim(),
+      topic: form.topic,
+      budget: form.budget,
+      notes: form.notes.trim(),
+      date: day,
+      time,
+      offline: Boolean(res.offline),
+      mail: Boolean(res.data?.mail),
+      createdAt: new Date().toISOString(),
+    };
+    saveConfirmation(confirmation);
+    navigate(confirmationPath(confirmation), { replace: true });
   };
-
-  const dayInfo = days.find((d) => d.key === (confirmed?.date ?? day));
-  const prettyDay = dayInfo ? `${dayInfo.day}, ${dayInfo.month} ${dayInfo.date}` : confirmed?.date ?? "";
-
-  if (confirmed) {
-    const start = zonedToUtc(confirmed.date, confirmed.time, settings.timezone);
-    const title = `${settings.short} × ${form.name.split(" ")[0]} — discovery call`;
-    const details = `Topic: ${form.topic}\nReference: ${confirmed.reference}\nMeeting link will be shared by email/WhatsApp before the call.\nQuestions: ${settings.email}`;
-    const waMessage = `Hi ${settings.short}! I just booked a call for ${prettyDay} at ${confirmed.time} ${settings.timezoneLabel} (ref ${confirmed.reference}). Topic: ${form.topic}.`;
-    return (
-      <section className="relative pt-40 pb-28 md:pt-48">
-        <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
-        <div className="shell relative max-w-2xl">
-          <Reveal>
-            <div className="lux-card gold-orbit p-8 text-center md:p-12">
-              <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-b from-gold-200 to-gold-500 text-ink-950 shadow-[0_14px_40px_-12px_rgba(212,173,102,0.9)]">
-                <Icon name="calendar" className="h-7 w-7" />
-              </div>
-              <Eyebrow center className="mt-8">
-                Call reserved
-              </Eyebrow>
-              <h1 className="display mt-5 text-[2.4rem] leading-tight">
-                See you soon, <span className="serif-accent text-gold">{form.name.split(" ")[0]}.</span>
-              </h1>
-              <p className="mt-4 text-[15.5px] text-sand">
-                {prettyDay} · <span className="font-semibold text-gold-100">{confirmed.time} {settings.timezoneLabel}</span> · {minutes} minutes
-                {localLabel(confirmed.date, confirmed.time) ? <span className="block text-[13px] text-mist">That's {localLabel(confirmed.date, confirmed.time)} your time</span> : null}
-              </p>
-              {confirmed.offline ? (
-                <div className="mx-auto mt-6 rounded-2xl border border-ember/40 bg-ember/10 p-4 text-left text-[13.5px] text-parchment">
-                  Our server didn't respond, so please confirm this slot on WhatsApp — it takes one tap.
-                </div>
-              ) : null}
-              <p className="mx-auto mt-6 max-w-md text-[14px] leading-relaxed text-mist">
-                A {settings.booking.meetingTool} link will reach <span className="text-parchment">{form.email}</span> before the call. Reference{" "}
-                <span className="font-mono text-gold-200">{confirmed.reference}</span>.
-              </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <a href={googleCalendarUrl({ title, start, minutes, details })} target="_blank" rel="noopener noreferrer" className="btn btn-gold btn-sm shine">
-                  <Icon name="calendar" className="h-4 w-4" /> Add to Google Calendar
-                </a>
-                <button type="button" onClick={() => downloadIcs({ title, start, minutes, details, uid: confirmed.reference || String(Date.now()) })} className="btn btn-line btn-sm">
-                  <Icon name="download" className="h-4 w-4" /> Download .ics
-                </button>
-                <a href={whatsappLink(settings, waMessage)} target="_blank" rel="noopener noreferrer" className="btn btn-line btn-sm">
-                  <Icon name="whatsapp" className="h-4 w-4" /> Confirm on WhatsApp
-                </a>
-              </div>
-              <div className="hairline my-9" />
-              <Button to="/work" variant="ghost" arrow>
-                Browse our work before the call
-              </Button>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section className="relative overflow-hidden pt-40 pb-28 md:pt-48">

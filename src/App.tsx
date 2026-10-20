@@ -14,11 +14,13 @@ import AdminPortal from "./pages/AdminPortal";
 import BookCallPage from "./pages/BookCall";
 import CapabilityDetail from "./pages/CapabilityDetail";
 import CaseStudyPage from "./pages/CaseStudy";
+import ConfirmationPage from "./pages/Confirmation";
 import Contact from "./pages/Contact";
 import Home from "./pages/Home";
 import { InsightArticle, InsightsPage } from "./pages/Insights";
 import LegalPage from "./pages/Legal";
 import NotFoundPage from "./pages/NotFound";
+import PayPage from "./pages/Pay";
 import Portfolio from "./pages/Portfolio";
 import Pricing from "./pages/Pricing";
 import Services from "./pages/Services";
@@ -46,6 +48,8 @@ function resolve(path: string, content: SiteContent): { node: ReactNode; title: 
       insights: { node: <InsightsPage />, title: t("Insights — Engineering Notes") },
       contact: { node: <Contact />, title: t("Contact — Start a Project") },
       book: { node: <BookCallPage />, title: t("Book a Free 30-Minute Strategy Call") },
+      pay: { node: <PayPage />, title: t("Pay Securely Online") },
+      confirmation: { node: <ConfirmationPage />, title: t("Confirmation") },
       privacy: { node: <LegalPage doc="privacy" />, title: t("Privacy Policy") },
       terms: { node: <LegalPage doc="terms" />, title: t("Terms of Service") },
       sitemap: { node: <Sitemap />, title: t("Sitemap") },

@@ -119,6 +119,29 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS payments (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference          TEXT NOT NULL UNIQUE,
+    razorpay_order_id  TEXT NOT NULL UNIQUE,
+    razorpay_payment_id TEXT,
+    name               TEXT NOT NULL,
+    email              TEXT NOT NULL,
+    phone              TEXT,
+    company_name       TEXT,
+    purpose            TEXT NOT NULL,
+    amount             INTEGER NOT NULL,
+    currency           TEXT NOT NULL DEFAULT 'INR',
+    status             TEXT NOT NULL DEFAULT 'created'
+                       CHECK (status IN ('created','paid','failed')),
+    method             TEXT,
+    paid_at            TEXT,
+    enquiry_id         INTEGER REFERENCES enquiries(id) ON DELETE SET NULL,
+    ip_address         TEXT,
+    user_agent         TEXT,
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
@@ -177,6 +200,8 @@ for (const ddl of [
 ]) {
   addColumn("enquiries", ddl);
 }
+addColumn("payments", "method TEXT");
+addColumn("payments", "paid_at TEXT");
 
 // Older schema restricted statuses without 'lost' — rebuild the table once if needed.
 const enquiriesSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='enquiries'").get() as { sql?: string } | undefined)?.sql ?? "";
@@ -208,6 +233,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_audit_time        ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_content_listing   ON content(collection, published, sort_order);
   CREATE INDEX IF NOT EXISTS idx_sessions_user     ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_payments_status   ON payments(status);
+  CREATE INDEX IF NOT EXISTS idx_payments_created  ON payments(created_at);
 `);
 db.pragma("user_version = 2");
 

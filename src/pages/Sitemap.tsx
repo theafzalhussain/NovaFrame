@@ -18,6 +18,7 @@ export default function Sitemap() {
         { label: "Insights", to: "/insights" },
         { label: "Contact", to: "/contact" },
         { label: "Book a call", to: "/book" },
+        { label: "Pay online", to: "/pay" },
       ],
     },
     { title: "Services", links: collections.services.map((s) => ({ label: s.title, to: `/services/${s.id}` })) },

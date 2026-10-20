@@ -3,6 +3,7 @@ import { Icon } from "../components/Icons";
 import { StudioStatusPill } from "../components/StudioStatus";
 import { Button, PageHero, Reveal } from "../components/ui";
 import { api, track } from "../lib/api";
+import { confirmationPath, saveConfirmation } from "../lib/confirmation";
 import { useContent } from "../lib/content";
 import { Link, useRouter } from "../lib/router";
 import { clearBriefDraft, phoneHref, readBriefDraft, whatsappLink } from "../lib/site";
@@ -55,11 +56,10 @@ function ChoiceGroup({ options, value, onChange, label }: { options: string[]; v
 
 export default function Contact() {
   const { settings, advanced, collections } = useContent();
-  const { query } = useRouter();
+  const { query, navigate } = useRouter();
   const [form, setForm] = useState<FormState>(() => ({ ...EMPTY, timeline: advanced.timelineOptions[1] ?? "" }));
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [pending, setPending] = useState(false);
-  const [sent, setSent] = useState<{ reference: string; offline: boolean } | null>(null);
   const [source, setSource] = useState("contact");
   const [prefilled, setPrefilled] = useState(false);
 
@@ -108,13 +108,25 @@ export default function Contact() {
       else setErrors({ details: res.error ?? "Something went wrong. Please email us directly." });
       return;
     }
-    setSent({ reference: res.data?.reference ?? "", offline: Boolean(res.offline) });
     track("enquiry_submitted", { service: form.service, budget: form.budget, source });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const confirmation = {
+      kind: "enquiry" as const,
+      reference: res.data?.reference ?? "",
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      companyName: form.companyName.trim(),
+      service: form.service,
+      budget: form.budget,
+      timeline: form.timeline,
+      details: form.details.trim(),
+      offline: Boolean(res.offline),
+      mail: Boolean(res.data?.mail),
+      createdAt: new Date().toISOString(),
+    };
+    saveConfirmation(confirmation);
+    navigate(confirmationPath(confirmation), { replace: true });
   };
-
-  const briefText = `Name: ${form.name}\nCompany: ${form.companyName}\nEmail: ${form.email}\nPhone: ${form.phone}\nService: ${form.service}\nBudget: ${form.budget}\nTimeline: ${form.timeline}\n\n${form.details}`;
-  const mailto = `mailto:${settings.email}?subject=${encodeURIComponent(`Project enquiry — ${form.service || "New project"}`)}&body=${encodeURIComponent(briefText)}`;
 
   return (
     <>
@@ -136,69 +148,7 @@ export default function Contact() {
         <div className="shell grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
           <Reveal>
             <div className="lux-card gold-edge relative overflow-hidden p-6 md:p-10">
-              {sent ? (
-                <div className="py-6 text-center md:py-10" aria-live="polite">
-                  <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-b from-gold-200 to-gold-500 text-ink-950 shadow-[0_14px_40px_-12px_rgba(212,173,102,0.9)]">
-                    <Icon name="check" className="h-7 w-7" strokeWidth={2.4} />
-                  </div>
-                  <h2 className="display mt-8 text-[2.2rem] leading-tight">
-                    Thank you, {form.name.split(" ")[0]}. <span className="serif-accent text-gold">Brief received.</span>
-                  </h2>
-                  {sent.offline ? (
-                    <div className="mx-auto mt-6 max-w-lg rounded-2xl border border-ember/40 bg-ember/10 p-5 text-left text-[13.5px] leading-relaxed text-parchment">
-                      <p className="font-semibold text-ivory">Our server didn't respond, so the brief is only saved in this browser.</p>
-                      <p className="mt-1.5 text-sand">Please send it with one tap so it definitely reaches us:</p>
-                      <div className="mt-4 flex flex-wrap gap-2.5">
-                        <a href={mailto} className="btn btn-gold btn-sm">
-                          <Icon name="mail" className="h-4 w-4" /> Send by email
-                        </a>
-                        <a href={whatsappLink(settings, `Hi! My project brief:\n\n${briefText}`)} target="_blank" rel="noopener noreferrer" className="btn btn-line btn-sm">
-                          <Icon name="whatsapp" className="h-4 w-4" /> Send on WhatsApp
-                        </a>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-mist">
-                      {settings.responseTime}. If it's urgent, book a call and we can scope it the same day.
-                    </p>
-                  )}
-                  <dl className="mx-auto mt-8 max-w-sm space-y-2.5 rounded-2xl border border-gold-300/10 bg-ink-950/60 p-5 text-left text-[13.5px]">
-                    {sent.reference ? (
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-mist">Reference</dt>
-                        <dd className="font-mono text-gold-200">{sent.reference}</dd>
-                      </div>
-                    ) : null}
-                    {[
-                      ["Service", form.service],
-                      ["Budget", form.budget],
-                      ["Timeline", form.timeline],
-                    ].map(([k, v]) => (
-                      <div key={k} className="flex justify-between gap-4">
-                        <dt className="text-mist">{k}</dt>
-                        <dd className="text-right font-semibold text-parchment">{v}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <div className="mt-8 flex flex-wrap justify-center gap-3">
-                    <Button to="/book" arrow>
-                      Book a call now
-                    </Button>
-                    <button
-                      type="button"
-                      className="btn btn-line"
-                      onClick={() => {
-                        setForm({ ...EMPTY, timeline: advanced.timelineOptions[1] ?? "" });
-                        setSent(null);
-                        setPrefilled(false);
-                      }}
-                    >
-                      Send another brief
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={submit} noValidate>
+              <form onSubmit={submit} noValidate>
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <p className="eyebrow">Project brief</p>
@@ -283,7 +233,6 @@ export default function Contact() {
                     </button>
                   </div>
                 </form>
-              )}
             </div>
           </Reveal>
 
