@@ -1,0 +1,6 @@
+# Railway / Nixpacks build config.
+# better-sqlite3 is a native module: if no prebuilt binary matches the exact
+# Node version, npm compiles it from source, which needs Python + a C/C++
+# toolchain. These packages make that compile step succeed on Railway.
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-9_x", "python3", "gcc", "gnumake", "pkg-config"]
