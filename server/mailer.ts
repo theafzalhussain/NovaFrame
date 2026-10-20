@@ -34,6 +34,18 @@ export type Message = {
 /* ------------------------------------------------------------------ */
 let transport: Transporter | null | undefined;
 
+/**
+ * Three delivery backends, chosen automatically (first match wins):
+ *   1. Brevo HTTP API (BREVO_API_KEY)   — your existing Brevo account, but over
+ *      HTTPS (443) instead of SMTP. Works on Railway Hobby/Trial, which blocks
+ *      outbound SMTP ports. Use the "xkeysib-..." API key (SMTP & API → API Keys).
+ *   2. Resend HTTP API (RESEND_API_KEY) — alternative HTTPS provider.
+ *   3. SMTP via Nodemailer (SMTP_HOST)  — the original path; used locally and on
+ *      hosts that allow SMTP egress.
+ */
+const brevoEnabled = () => Boolean(process.env.BREVO_API_KEY);
+const resendEnabled = () => Boolean(process.env.RESEND_API_KEY);
+
 function getTransport(): Transporter | null {
   if (transport !== undefined) return transport;
   const host = process.env.SMTP_HOST;
@@ -51,14 +63,47 @@ function getTransport(): Transporter | null {
   return transport;
 }
 
-export const mailEnabled = () => Boolean(process.env.SMTP_HOST);
+export const mailEnabled = () => brevoEnabled() || resendEnabled() || Boolean(process.env.SMTP_HOST);
+/** Which backend is active — used only for start-up logging. */
+export const mailBackend = () =>
+  brevoEnabled() ? "Brevo API (HTTPS)" : resendEnabled() ? "Resend (HTTPS)" : process.env.SMTP_HOST ? "SMTP" : "off";
 const confirmationsOn = () => process.env.SEND_CONFIRMATIONS !== "false";
 const studioInbox = (settings: SiteSettings) => process.env.NOTIFY_EMAIL || settings.email;
 
-/** Logs in to the SMTP server once, so a bad key or blocked IP shows up at start-up. */
+/**
+ * Parses a From header into { name, email } for APIs that want them split.
+ * Accepts `"Name" <a@b.com>`, `Name <a@b.com>` or a bare `a@b.com`.
+ */
+function parseFrom(header: string, fallbackName: string): { name: string; email: string } {
+  const m = header.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (m) return { name: m[1].trim() || fallbackName, email: m[2].trim() };
+  return { name: fallbackName, email: header.trim() };
+}
+
+/** The From header. Resend/SMTP use the raw string; Brevo splits it with parseFrom(). */
+function fromHeader(settings: SiteSettings) {
+  if (process.env.MAIL_FROM) return process.env.MAIL_FROM;
+  if (resendEnabled() && !brevoEnabled()) return `${settings.name} <onboarding@resend.dev>`;
+  return `"${settings.name}" <${process.env.SMTP_USER || settings.email}>`;
+}
+
+/** Confirms the active backend is usable, so misconfiguration shows up at start-up. */
 export async function verifyMail(): Promise<{ ok: boolean; error?: string }> {
+  if (brevoEnabled()) {
+    if (!process.env.MAIL_FROM) {
+      return { ok: true, error: "MAIL_FROM not set — set it to a Brevo-verified sender (e.g. \"Novaframe Studio <you@yourdomain.com>\")." };
+    }
+    return { ok: true };
+  }
+  if (resendEnabled()) {
+    // Resend has no cheap verify endpoint — a bad key surfaces on the first send and is logged there.
+    if (!process.env.MAIL_FROM) {
+      return { ok: true, error: "MAIL_FROM not set — using onboarding@resend.dev (test sender). Set MAIL_FROM to a verified domain for production." };
+    }
+    return { ok: true };
+  }
   const t = getTransport();
-  if (!t) return { ok: false, error: "SMTP_HOST is not set" };
+  if (!t) return { ok: false, error: "None of BREVO_API_KEY, RESEND_API_KEY or SMTP_HOST is set" };
   try {
     await t.verify();
     return { ok: true };
@@ -67,11 +112,86 @@ export async function verifyMail(): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
+/** ical attachment content → base64 string (templates always pass a string). */
+function icalBase64(message: Message): { name: string; b64: string; method: string } | null {
+  const ical = message.icalEvent;
+  if (!ical) return null;
+  const raw = ical.content;
+  const buf = typeof raw === "string" ? Buffer.from(raw) : Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw ?? ""));
+  return { name: ical.filename || "invite.ics", b64: buf.toString("base64"), method: ical.method || "PUBLISH" };
+}
+
+/** Sends one message over Brevo's transactional email HTTP API. Throws on a non-2xx response. */
+async function sendViaBrevo(message: Message, settings: SiteSettings) {
+  const sender = parseFrom(process.env.MAIL_FROM || `${settings.name} <${settings.email}>`, settings.name);
+  const ics = icalBase64(message);
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": process.env.BREVO_API_KEY as string,
+      "Content-Type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: message.to }],
+      subject: message.subject,
+      htmlContent: message.html,
+      textContent: message.text,
+      ...(message.replyTo ? { replyTo: { email: message.replyTo } } : {}),
+      ...(ics ? { attachment: [{ name: ics.name, content: ics.b64 }] } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Brevo ${res.status}: ${detail.slice(0, 300) || res.statusText}`);
+  }
+}
+
+/** Sends one message over Resend's HTTPS API. Throws on a non-2xx response. */
+async function sendViaResend(message: Message, settings: SiteSettings) {
+  const ics = icalBase64(message);
+  const attachments = ics
+    ? [{ filename: ics.name, content: ics.b64, content_type: `text/calendar; method=${ics.method}; charset=utf-8` }]
+    : undefined;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromHeader(settings),
+      to: [message.to],
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+      ...(attachments ? { attachments } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 300) || res.statusText}`);
+  }
+}
+
 export async function send(message: Message, settings: SiteSettings) {
+  if (brevoEnabled()) {
+    await sendViaBrevo(message, settings);
+    return;
+  }
+  if (resendEnabled()) {
+    await sendViaResend(message, settings);
+    return;
+  }
   const t = getTransport();
   if (!t) return;
-  const from = process.env.MAIL_FROM || `"${settings.name}" <${process.env.SMTP_USER || settings.email}>`;
-  await t.sendMail({ from, ...message });
+  await t.sendMail({ from: fromHeader(settings), ...message });
 }
 
 export type DeliveryReport = { studio: "sent" | "failed" | "skipped"; client: "sent" | "failed" | "skipped"; errors: string[] };

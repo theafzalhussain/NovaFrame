@@ -1,24 +1,25 @@
 /**
- * Email check — logs in to SMTP and sends one sample of every template
- * (enquiry, call booking, payment × studio alert + client email) to NOTIFY_EMAIL.
+ * Email check — verifies the active backend (Resend or SMTP) and sends one
+ * sample of every template (enquiry, call booking, payment × studio + client)
+ * to NOTIFY_EMAIL.
  *
  *   npm run mail:test
  */
 import "./env.js";
 import { defaultContent } from "../src/data/defaults.js";
-import { bookingEmails, leadEmails, mailEnabled, paymentEmails, send, verifyMail, type MailContext, type Message } from "./mailer.js";
+import { bookingEmails, leadEmails, mailBackend, mailEnabled, paymentEmails, send, verifyMail, type MailContext, type Message } from "./mailer.js";
 
 const settings = defaultContent.settings;
 const to = process.env.NOTIFY_EMAIL || settings.email;
 
 if (!mailEnabled()) {
-  console.error("Email is off — set SMTP_HOST, SMTP_USER and SMTP_PASS in .env first.");
+  console.error("Email is off — set RESEND_API_KEY (recommended on Railway/PaaS) or SMTP_HOST/SMTP_USER/SMTP_PASS in .env first.");
   process.exit(1);
 }
 
 const login = await verifyMail();
 if (!login.ok) {
-  console.error(`SMTP login failed: ${login.error}`);
+  console.error(`Email backend check failed (${mailBackend()}): ${login.error}`);
   if (/525|unauthori[sz]ed ip/i.test(login.error ?? "")) {
     console.error("→ Brevo is blocking this IP. Brevo → Settings → Security → Authorized IPs: add this machine's/server's IP (or deactivate IP blocking).");
   } else if (/535|auth/i.test(login.error ?? "")) {
@@ -26,7 +27,8 @@ if (!login.ok) {
   }
   process.exit(1);
 }
-console.log(`SMTP login OK (${process.env.SMTP_HOST}). Sending samples to ${to} from ${process.env.MAIL_FROM || process.env.SMTP_USER}…`);
+if (login.error) console.warn(`Note: ${login.error}`);
+console.log(`Email backend OK (${mailBackend()}). Sending samples to ${to} from ${process.env.MAIL_FROM || process.env.SMTP_USER || "onboarding@resend.dev"}…`);
 
 const founder = defaultContent.collections.team[0];
 const ctx: MailContext = { settings, founder: founder ? { name: founder.name, role: founder.role } : undefined, siteUrl: process.env.SITE_URL?.replace(/\/+$/, "") };

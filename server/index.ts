@@ -25,7 +25,7 @@ import {
   type SiteSettings,
 } from "../src/data/types.js";
 import { defaultContent } from "../src/data/defaults.js";
-import { mailEnabled, notifyBooking, notifyLead, notifyPayment, verifyMail, type MailContext } from "./mailer.js";
+import { mailEnabled, mailBackend, notifyBooking, notifyLead, notifyPayment, verifyMail, type MailContext } from "./mailer.js";
 import Razorpay from "razorpay";
 import {
   TZ_MOD,
@@ -1362,13 +1362,13 @@ app.use((err: Error & { type?: string; status?: number }, _req: Request, res: Re
 app.listen(PORT, () => {
   console.log(`\n  > Novaframe API ready:  http://localhost:${PORT}/api/health`);
   console.log(`  > Admin console:       http://localhost:5173/#/admin (dev) or this server's /#/admin`);
-  console.log(`  > Email notifications: ${mailEnabled() ? "on (SMTP)" : "off (set SMTP_HOST to enable)"}`);
+  console.log(`  > Email notifications: ${mailEnabled() ? `on (${mailBackend()})` : "off (set RESEND_API_KEY or SMTP_HOST to enable)"}`);
   console.log(`  > Online payments:     ${paymentsEnabled() ? `on (Razorpay ${paymentsTestMode() ? "TEST" : "LIVE"} mode)` : "off (set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)"}\n`);
   if (mailEnabled()) {
     void verifyMail().then((r) =>
       r.ok
-        ? console.log(`  > SMTP login verified (${process.env.SMTP_HOST})`)
-        : console.error(`  > SMTP login FAILED — emails will not be delivered: ${r.error}`),
+        ? console.log(`  > Email backend ready: ${mailBackend()}${r.error ? ` — note: ${r.error}` : ""}`)
+        : console.error(`  > Email backend FAILED — emails will not be delivered: ${r.error}`),
     );
   }
 });
