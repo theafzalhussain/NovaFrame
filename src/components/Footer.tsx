@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "../lib/router";
 import { useContent } from "../lib/content";
 import { api, track } from "../lib/api";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { phoneHref, whatsappLink } from "../lib/site";
 import { Logo, Seal } from "./Brand";
 import { Icon } from "./Icons";
@@ -50,7 +51,7 @@ function Newsletter() {
           }}
           placeholder="you@company.com"
           autoComplete="email"
-          className="min-w-0 flex-1 bg-transparent px-3.5 py-2 text-[14px] text-ivory placeholder:text-smoke focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent px-3.5 py-2.5 text-[14px] text-ivory placeholder:text-smoke focus:outline-none"
         />
         <button type="submit" disabled={state === "busy"} className="btn btn-gold btn-sm shrink-0">
           {state === "busy" ? "Joining…" : "Subscribe"}
@@ -69,6 +70,7 @@ function Newsletter() {
 export default function Footer() {
   const { settings, collections } = useContent();
   const year = new Date().getFullYear();
+  const pauseOffscreen = usePauseOffscreen(); // the gold shimmer on the closing line runs only while visible
 
   const studio = [
     { label: "Work", to: "/work" },
@@ -81,8 +83,12 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="relative z-10 mt-10 overflow-hidden border-t border-gold-300/[0.08] bg-ink-950">
-      <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[900px] -translate-x-1/2 rounded-full bg-gold-500/[0.08] blur-[120px]" />
+    <footer ref={pauseOffscreen} className="cv-auto relative z-10 mt-10 overflow-hidden border-t border-gold-300/[0.08] bg-ink-950">
+      {/* Soft glow as a gradient — the old 120px blur filter was very expensive to paint on phones. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-[280px] left-1/2 h-[560px] w-[1300px] -translate-x-1/2 bg-[radial-gradient(closest-side,rgba(195,149,74,0.08),transparent)]"
+      />
 
       {/* Closing CTA */}
       <div className="shell relative pt-24 pb-16 md:pt-28">
@@ -171,24 +177,24 @@ export default function Footer() {
 
           <div>
             <h3 className="label">Get in touch</h3>
-            <ul className="mt-5 space-y-3 text-[14px] text-sand">
+            <ul className="mt-3.5 text-[14px] text-sand">
               <li>
-                <a href={`mailto:${settings.email}`} className="inline-flex items-center gap-2.5 break-all transition hover:text-gold-200">
+                <a href={`mailto:${settings.email}`} className="inline-flex items-center gap-2.5 py-1.5 break-all transition hover:text-gold-200">
                   <Icon name="mail" className="h-4 w-4 shrink-0 text-gold-400" />
                   {settings.email}
                 </a>
               </li>
               <li>
-                <a href={phoneHref(settings.phone)} className="inline-flex items-center gap-2.5 transition hover:text-gold-200">
+                <a href={phoneHref(settings.phone)} className="inline-flex items-center gap-2.5 py-1.5 transition hover:text-gold-200">
                   <Icon name="call" className="h-4 w-4 shrink-0 text-gold-400" />
                   {settings.phone}
                 </a>
               </li>
-              <li className="flex items-start gap-2.5">
+              <li className="flex items-start gap-2.5 py-1.5">
                 <Icon name="map-pin" className="mt-0.5 h-4 w-4 shrink-0 text-gold-400" />
                 {settings.location}
               </li>
-              <li className="flex items-start gap-2.5 text-mist">
+              <li className="flex items-start gap-2.5 py-1.5 text-mist">
                 <Icon name="clock" className="mt-0.5 h-4 w-4 shrink-0 text-gold-400" />
                 {settings.hours}
               </li>
@@ -209,14 +215,14 @@ export default function Footer() {
           <p>
             © {year} {settings.legal}. All rights reserved.
           </p>
-          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="Legal">
-            <Link to="/privacy" className="transition hover:text-gold-200">
+          <nav className="-mx-2 flex flex-wrap items-center gap-x-1 gap-y-1" aria-label="Legal">
+            <Link to="/privacy" className="rounded-md px-2 py-2 transition hover:text-gold-200">
               Privacy
             </Link>
-            <Link to="/terms" className="transition hover:text-gold-200">
+            <Link to="/terms" className="rounded-md px-2 py-2 transition hover:text-gold-200">
               Terms
             </Link>
-            <Link to="/sitemap" className="transition hover:text-gold-200">
+            <Link to="/sitemap" className="rounded-md px-2 py-2 transition hover:text-gold-200">
               Sitemap
             </Link>
           </nav>

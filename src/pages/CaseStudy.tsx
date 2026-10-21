@@ -212,15 +212,15 @@ export default function CaseStudyPage({ project }: { project: Project }) {
                 { p: prev, label: "Previous", icon: "arrow-left" },
                 { p: next, label: "Next", icon: "arrow" },
               ].map(({ p, label, icon }) => (
-                <Link key={label} to={`/work/${p.id}`} className="lux-card lux-hover group flex items-center gap-5 p-5">
-                  <span className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl border border-gold-300/10">
+                <Link key={label} to={`/work/${p.id}`} className="lux-card lux-hover group flex items-center gap-4 p-5 sm:gap-5">
+                  <span className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl border border-gold-300/10 sm:h-16 sm:w-24">
                     <ProjectVisual project={p} compact />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="label">{label}</span>
-                    <span className="display mt-1 block truncate text-[1.4rem] group-hover:text-gold-100">{p.title}</span>
+                    <span className="display mt-1 line-clamp-2 block text-[1.25rem] leading-tight group-hover:text-gold-100 sm:text-[1.4rem]">{p.title}</span>
                   </span>
-                  <Icon name={icon} className="h-4 w-4 text-gold-300" />
+                  <Icon name={icon} className="h-4 w-4 shrink-0 text-gold-300" />
                 </Link>
               ))}
             </nav>

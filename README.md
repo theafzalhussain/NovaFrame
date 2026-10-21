@@ -4,7 +4,7 @@ The marketing site and client console for **Novaframe Studio**, a founder-led pr
 It uses a dark "Noir & Champagne" design: gold `#d4ad66` on warm obsidian, set in Fraunces, Manrope and JetBrains Mono.
 Every section of the site is served from a database and is editable in a role-based admin console.
 
-- **Frontend:** React 19, TypeScript, Vite 7, Tailwind CSS v4, Three.js (armillary hero scene)
+- **Frontend:** React 19, TypeScript, Vite 7, Tailwind CSS v4, Three.js (armillary hero scene, loaded on demand)
 - **API (default):** Node.js + Express 5 + SQLite (`better-sqlite3`), optional SMTP email via Nodemailer
 - **API (shared hosting):** PHP 8 + MySQL. It exposes the same contract, so the site and console work unchanged.
 
@@ -48,7 +48,7 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 |---|---|
 | `npm run dev` | Vite dev server on :5173. `/api` is proxied to `API_PROXY_TARGET` (default `http://localhost:4000`) |
 | `npm run server` / `server:watch` | Node API on `PORT` (default 4000); the watch variant reloads on change |
-| `npm run build` | Production build → `dist/` (single-file `index.html` plus `public/` assets) |
+| `npm run build` | Production build → `dist/`: `index.html`, content-hashed, code-split files in `dist/assets/`, plus `public/` (fonts, images) |
 | `npm run preview` | Serve the build locally (also proxies `/api`) |
 | `npm start` | Build, then serve site **and** API from one Node process on `PORT` |
 | `npm run typecheck` | Strict TypeScript check for the web app and the server |
@@ -158,7 +158,8 @@ Run the API anywhere, with `CORS_ORIGIN=https://your-domain.com`.
    - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (10+ characters)
    - optional: `CORS_ORIGIN`, `SESSION_DAYS`, `TZ_OFFSET_MINUTES`
 3. Upload the contents of `server/php/` to `public_html/api/`. Include `.htaccess`, which routes requests and blocks `.env`, `seed.json`, `config.php` and `schema.sql`.
-4. Run `npm run build` and upload the contents of `dist/` to `public_html/`. The site calls `/api` on the same domain.
+4. Run `npm run build` and upload the contents of `dist/` to `public_html/` (`index.html`, `assets/`, `fonts/` and the image folders). The site calls `/api` on the same domain.
+   When you update the site, upload the new build over the old one. Files in `assets/` have content-hashed names, so older ones can stay; a visitor whose browser still has the previous page cached is reloaded onto the new build automatically.
 5. Open `https://your-domain.com/#/admin` and sign in. Content is seeded from `seed.json` on the first request.
 
 Passwords use PBKDF2-SHA512 with 100k iterations in both editions, so the hashes are compatible between them.
@@ -206,13 +207,27 @@ curl -X POST http://localhost:4000/api/enquiries -H "Content-Type: application/j
 - Serve everything over **HTTPS**, because admin tokens are bearer tokens.
 - Set `TRUST_PROXY=1` behind a proxy. Rate limits are kept in memory per process.
 - Back up the database regularly: Admin → Security & team → Backups, or copy the SQLite file while the server is stopped.
+- The Node server compresses responses (gzip/brotli) and caches `dist/assets/*` for a year (`index.html` is always revalidated). On Apache/shared hosting, make sure gzip or brotli is on (most hosts enable it by default).
+
+---
+
+## Performance notes (mobile)
+
+The site is tuned to stay responsive on mid-range phones. Keep these in mind when changing it:
+
+- **Code splitting:** only the home page ships in the main bundle. Other pages, the admin console and three.js load on demand (`src/lib/lazyPage.tsx`); public pages are prefetched while the browser is idle.
+- **Hero scene:** `HeroCanvas` loads three.js after the page has loaded and gone idle. Phones and small tablets get a light version (matcap shading, 30 fps, pauses while scrolling); Data Saver or very low-memory devices get static artwork.
+- **No blur on touch screens:** `backdrop-filter` and large `filter: blur()` glows are desktop-only (`pointer-fine:` variants, `.lux-glass`, gradient glows). Blur is recomputed on every scrolled frame and is the main cause of lag on phones.
+- **Animations only when visible:** looping animations pause when off screen (`usePauseOffscreen`) or inside hidden panels, and page sections use `content-visibility: auto`. Prefer animating `transform`/`opacity` only.
+- **Fonts** are self-hosted in `public/fonts` and preloaded in `index.html`.
+- **Tap targets:** fixed overlays must not cover content (the floating contact dock is click-through except for its button), and hover effects live behind `@media (hover: hover)` so a tap is never spent on a hover state.
 
 ---
 
 ## Project structure
 
 ```text
-public/            brand mark, project screenshots, founder photo
+public/            brand mark, project screenshots, founder photo, self-hosted fonts
 server/
   index.ts         Express API (public + admin routes, static dist serving)
   db.ts            SQLite schema, migrations, seeding, password + token hashing

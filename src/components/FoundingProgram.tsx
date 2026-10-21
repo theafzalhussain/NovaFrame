@@ -1,4 +1,5 @@
 import { useSettings } from "../lib/content";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { Seal } from "./Brand";
 import { Icon } from "./Icons";
 import { Button, Reveal } from "./ui";
@@ -7,16 +8,20 @@ import { Button, Reveal } from "./ui";
 export default function FoundingProgram() {
   const settings = useSettings();
   const offer = settings.founding;
+  const pauseOffscreen = usePauseOffscreen(); // the animated gold border only runs while the card is on screen
   if (!offer.enabled) return null;
   const taken = Math.max(0, offer.slotsTotal - offer.slotsLeft);
 
   return (
-    <section className="relative py-24 md:py-32">
+    <section ref={pauseOffscreen} className="relative py-24 md:py-32">
       <div className="shell">
         <Reveal>
           <div className="lux-card gold-orbit relative overflow-hidden rounded-[32px]">
             <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
-            <div aria-hidden className="absolute -top-32 -right-24 h-80 w-80 rounded-full bg-gold-400/15 blur-[100px]" />
+            <div
+              aria-hidden
+              className="absolute -top-[13rem] -right-[11rem] h-[30rem] w-[30rem] bg-[radial-gradient(closest-side,rgba(212,173,102,0.15),transparent)]"
+            />
             <div className="relative grid gap-12 p-8 md:p-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
               <div>
                 <span className="eyebrow">{offer.eyebrow}</span>

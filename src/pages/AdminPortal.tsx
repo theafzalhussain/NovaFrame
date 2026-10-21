@@ -143,7 +143,7 @@ function Login({ onAuthed }: { onAuthed: (u: AdminUser) => void }) {
               </label>
               <div className="relative mt-2">
                 <input id="a-pass" type={show ? "text" : "password"} autoComplete="current-password" required className="field pr-12" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••" />
-                <button type="button" onClick={() => setShow((v) => !v)} className="absolute top-1/2 right-3 -translate-y-1/2 text-smoke hover:text-gold-200" aria-label={show ? "Hide password" : "Show password"}>
+                <button type="button" onClick={() => setShow((v) => !v)} className="absolute top-1/2 right-1.5 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full text-smoke hover:text-gold-200" aria-label={show ? "Hide password" : "Show password"}>
                   <Icon name={show ? "eye-off" : "eye"} className="h-4 w-4" />
                 </button>
               </div>
@@ -335,7 +335,7 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
       ) : null}
 
       <div className="lg:pl-[272px]">
-        <header className="sticky top-0 z-30 border-b border-gold-300/10 bg-ink-950/85 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b border-gold-300/10 bg-ink-950/95 pointer-fine:bg-ink-950/85 pointer-fine:backdrop-blur-xl">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button type="button" onClick={() => setMenuOpen(true)} className="btn btn-ghost btn-icon h-10 w-10 lg:hidden" aria-label="Open menu">
               <Icon name="menu" className="h-5 w-5" />

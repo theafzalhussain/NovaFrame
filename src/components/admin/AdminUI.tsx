@@ -97,7 +97,7 @@ export function Modal({ title, children, onClose, size = "md", footer }: { title
   useEscape(onClose);
   return (
     <div className="fixed inset-0 z-[9990] flex items-start justify-center overflow-y-auto p-4 pt-[10vh]" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Close" className="fixed inset-0 cursor-default bg-ink-950/80 backdrop-blur-sm" onClick={onClose} />
+      <button type="button" aria-label="Close" className="fixed inset-0 cursor-default bg-ink-950/85 pointer-fine:bg-ink-950/80 pointer-fine:backdrop-blur-sm" onClick={onClose} />
       <div className={cn("lux-panel page-enter relative w-full rounded-[22px]", size === "sm" ? "max-w-md" : size === "lg" ? "max-w-3xl" : "max-w-xl")}>
         <div className="flex items-center justify-between gap-4 border-b border-gold-300/10 px-6 py-4">
           <h2 className="display text-[1.3rem]">{title}</h2>
@@ -116,7 +116,7 @@ export function Drawer({ title, subtitle, children, onClose, footer, width = "ma
   useEscape(onClose);
   return (
     <div className="fixed inset-0 z-[9980] flex justify-end" role="dialog" aria-modal="true">
-      <button type="button" aria-label="Close panel" className="absolute inset-0 cursor-default bg-ink-950/70 backdrop-blur-sm" onClick={onClose} />
+      <button type="button" aria-label="Close panel" className="absolute inset-0 cursor-default bg-ink-950/80 pointer-fine:bg-ink-950/70 pointer-fine:backdrop-blur-sm" onClick={onClose} />
       <div className={cn("relative flex h-full w-full flex-col border-l border-gold-300/12 bg-ink-900 shadow-2xl", width)} style={{ animation: "drawer-in .45s cubic-bezier(.16,1,.3,1) both" }}>
         <div className="flex items-start justify-between gap-4 border-b border-gold-300/10 px-6 py-5">
           <div className="min-w-0">

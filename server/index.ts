@@ -8,6 +8,7 @@
  */
 import "./env.js";
 import express, { type NextFunction, type Request, type Response } from "express";
+import compression from "compression";
 import cors from "cors";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -50,6 +51,8 @@ const SESSION_DAYS = Number(process.env.SESSION_DAYS) || 7;
 
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.TRUST_PROXY || "loopback, linklocal, uniquelocal");
+// gzip/brotli for the site's JS/CSS/HTML and API JSON — roughly 4x less to download on mobile data.
+app.use(compression({ threshold: 1024 }));
 
 const allowedOrigins = (process.env.CORS_ORIGIN || "")
   .split(",")
@@ -1346,8 +1349,25 @@ app.get("/api/admin/export", adminOnly, (req: AuthedRequest, res) => {
 /* ------------------------------------------------------------------ */
 const distDir = path.resolve(__dirname, "..", "dist");
 if (fs.existsSync(path.join(distDir, "index.html"))) {
-  app.use(express.static(distDir, { index: false, maxAge: "1h" }));
-  app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(distDir, "index.html")));
+  const assetsDir = path.join(distDir, "assets") + path.sep;
+  app.use(
+    express.static(distDir, {
+      index: false,
+      maxAge: "1h",
+      setHeaders(res, filePath) {
+        // Build files carry a content hash in their name, so they can be cached for good;
+        // the HTML that points at them must always be revalidated so a deploy shows up at once.
+        if (filePath.startsWith(assetsDir)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        else if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache");
+      },
+    }),
+  );
+  // A build file that no longer exists (old tab after a deploy) is a real 404, not the HTML page.
+  app.get(/^\/assets\//, (_req, res) => res.status(404).type("text/plain").send("Not found"));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache");
+    res.sendFile(path.join(distDir, "index.html"));
+  });
 }
 
 app.use("/api", (_req, res) => fail(res, 404, "Route not found."));

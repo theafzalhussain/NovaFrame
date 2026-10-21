@@ -4,12 +4,14 @@ import Faq from "../components/Faq";
 import { Icon } from "../components/Icons";
 import { Button, IconTile, PageHero, Reveal, SectionHeading } from "../components/ui";
 import { useContent } from "../lib/content";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { scrollToId } from "../lib/router";
 import { cn } from "../utils/cn";
 
 export default function Pricing() {
   const { collections, settings } = useContent();
   const founding = settings.founding;
+  const plansRef = usePauseOffscreen(); // "Most chosen" animated border only runs while visible
 
   return (
     <>
@@ -41,7 +43,7 @@ export default function Pricing() {
         </div>
       ) : null}
 
-      <section className="pb-24">
+      <section ref={plansRef} className="pb-24">
         <div className="shell grid gap-6 lg:grid-cols-3">
           {collections.packages.map((pkg, i) => (
             <Reveal key={pkg.id} delay={i * 90}>
@@ -56,8 +58,8 @@ export default function Pricing() {
                   <span className="chip">{pkg.timeline}</span>
                 </div>
                 <p className="mt-2 text-[13.5px] font-medium text-gold-300/85">{pkg.idealFor}</p>
-                <div className="mt-8 flex items-baseline gap-3">
-                  <span className="display text-gold text-[3rem] leading-none">{pkg.price}</span>
+                <div className="mt-8 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="display text-gold text-[2.6rem] leading-none sm:text-[3rem]">{pkg.price}</span>
                   <span className="text-[13px] text-mist">{pkg.usd}</span>
                 </div>
                 <p className="mt-2 font-mono text-[10.5px] tracking-[0.16em] text-smoke uppercase">{pkg.suffix}</p>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "../lib/router";
+import { scrollToId, useRouter } from "../lib/router";
 import { useContent } from "../lib/content";
 import { navLinks, whatsappLink } from "../lib/site";
 import { Icon } from "./Icons";
@@ -66,7 +66,7 @@ export default function CommandPalette() {
         run: () => {
           navigate("/pricing");
           setOpen(false);
-          setTimeout(() => document.getElementById("estimator")?.scrollIntoView({ behavior: "smooth" }), 160);
+          setTimeout(() => scrollToId("estimator"), 160);
         },
       },
       ...collections.services.map((s) => ({ id: `svc-${s.id}`, label: s.title, hint: "Service", icon: s.icon, keywords: s.tagline, run: go(`/services/${s.id}`) })),
@@ -112,7 +112,12 @@ export default function CommandPalette() {
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-start justify-center p-4 pt-[13vh]" role="dialog" aria-modal="true" aria-label="Search">
-      <button type="button" aria-label="Close search" className="absolute inset-0 cursor-default bg-ink-950/80 backdrop-blur-md" onClick={() => setOpen(false)} />
+      <button
+        type="button"
+        aria-label="Close search"
+        className="absolute inset-0 cursor-default bg-ink-950/90 pointer-fine:bg-ink-950/80 pointer-fine:backdrop-blur-md"
+        onClick={() => setOpen(false)}
+      />
       <div className="lux-panel page-enter relative w-full max-w-xl overflow-hidden rounded-[24px]">
         <div className="flex items-center gap-3 border-b border-gold-300/10 px-5">
           <Icon name="search" className="h-4 w-4 shrink-0 text-gold-400" />
@@ -147,7 +152,7 @@ export default function CommandPalette() {
                 key={c.id}
                 type="button"
                 data-index={i}
-                onMouseMove={() => setActive(i)}
+                onPointerMove={(e) => e.pointerType === "mouse" && setActive(i)}
                 onClick={() => c.run()}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors",

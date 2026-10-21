@@ -2,11 +2,40 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../utils/cn";
 import { Link } from "../lib/router";
 import { track } from "../lib/api";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { Icon } from "./Icons";
 
 /* ------------------------------------------------------------------ */
 /* Scroll reveal                                                      */
 /* ------------------------------------------------------------------ */
+// One observer for every <Reveal> on the page instead of one each (pages have dozens).
+const revealCallbacks = new WeakMap<Element, () => void>();
+let revealObserver: IntersectionObserver | null = null;
+
+function observeReveal(node: Element, onShow: () => void): () => void {
+  if (typeof IntersectionObserver === "undefined") {
+    onShow();
+    return () => {};
+  }
+  revealObserver ??= new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        revealObserver?.unobserve(entry.target);
+        revealCallbacks.get(entry.target)?.();
+        revealCallbacks.delete(entry.target);
+      }
+    },
+    { threshold: 0.06, rootMargin: "0px 0px -40px 0px" },
+  );
+  revealCallbacks.set(node, onShow);
+  revealObserver.observe(node);
+  return () => {
+    revealCallbacks.delete(node);
+    revealObserver?.unobserve(node);
+  };
+}
+
 export function Reveal({
   children,
   delay = 0,
@@ -24,21 +53,7 @@ export function Reveal({
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    if (typeof IntersectionObserver === "undefined") {
-      setShown(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setShown(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.06, rootMargin: "0px 0px -40px 0px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
+    return observeReveal(node, () => setShown(true));
   }, []);
 
   const Component = Tag as "div";
@@ -69,6 +84,8 @@ export function SpotlightCard({
     <Component
       ref={ref}
       onPointerMove={(e) => {
+        // Mouse only: on touch this fired on every finger move and forced a layout read each time.
+        if (e.pointerType !== "mouse") return;
         const el = ref.current;
         if (!el) return;
         const r = el.getBoundingClientRect();
@@ -231,7 +248,7 @@ export function Card({ children, className, hover = true }: { children: ReactNod
 }
 
 export function Glow({ className, color = "rgba(212,173,102,0.22)" }: { className?: string; color?: string }) {
-  return <div aria-hidden className={cn("glow-orb", className)} style={{ background: color }} />;
+  return <div aria-hidden className={cn("glow-orb", className)} style={{ background: `radial-gradient(closest-side, ${color}, transparent)` }} />;
 }
 
 export function Diamond({ className }: { className?: string }) {
@@ -313,8 +330,9 @@ export function Stat({ value, suffix = "", label, className }: { value: number |
 /* Marquee                                                            */
 /* ------------------------------------------------------------------ */
 export function Marquee({ items, reverse = false, className, gap = "gap-14" }: { items: ReactNode[]; reverse?: boolean; className?: string; gap?: string }) {
+  const pauseOffscreen = usePauseOffscreen<HTMLDivElement>();
   return (
-    <div className={cn("marquee-mask overflow-hidden", className)}>
+    <div ref={pauseOffscreen} className={cn("marquee-mask overflow-hidden", className)}>
       <div className={cn("marquee-track items-center", gap, reverse && "reverse")}>
         {[...items, ...items].map((item, i) => (
           <div key={i} className="shrink-0" aria-hidden={i >= items.length}>

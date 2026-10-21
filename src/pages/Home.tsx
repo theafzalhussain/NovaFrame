@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import HeroCanvas from "../components/HeroCanvas";
 import Comparison from "../components/Comparison";
 import Estimator from "../components/Estimator";
@@ -13,6 +13,7 @@ import { StatusDot, useStudioStatus } from "../components/StudioStatus";
 import { Button, Eyebrow, IconTile, Marquee, Reveal, SectionHeading, SpotlightCard, Stat } from "../components/ui";
 import type { Project } from "../data/types";
 import { useContent } from "../lib/content";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { Link, scrollToId } from "../lib/router";
 import { availabilityLabel, hostOf, whatsappLink } from "../lib/site";
 import { track } from "../lib/api";
@@ -23,16 +24,38 @@ import { cn } from "../utils/cn";
 /* ------------------------------------------------------------------ */
 function Rotator({ words }: { words: string[] }) {
   const [index, setIndex] = useState(0);
+  const ref = useRef<HTMLSpanElement | null>(null);
   useEffect(() => {
     if (words.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % words.length), 2800);
-    return () => clearInterval(id);
+    // Only cycles while the headline is on screen and the tab is visible.
+    let id = 0;
+    let onScreen = true;
+    const sync = () => {
+      const run = onScreen && !document.hidden;
+      if (run && !id) id = window.setInterval(() => setIndex((i) => (i + 1) % words.length), 2800);
+      if (!run && id) {
+        window.clearInterval(id);
+        id = 0;
+      }
+    };
+    const io = new IntersectionObserver((entries) => {
+      onScreen = Boolean(entries[0]?.isIntersecting);
+      sync();
+    });
+    if (ref.current) io.observe(ref.current);
+    document.addEventListener("visibilitychange", sync);
+    sync();
+    return () => {
+      io.disconnect();
+      document.removeEventListener("visibilitychange", sync);
+      window.clearInterval(id);
+    };
   }, [words.length]);
   if (!words.length) return null;
   // The gold gradient is applied per word: background-clip:text on the parent
   // would paint through every (hidden) child's glyphs.
   return (
-    <span className="rotator serif-accent">
+    <span ref={ref} className="rotator serif-accent">
       {words.map((word, i) => {
         const state = i === index ? "active" : (i + 1) % words.length === index ? "prev" : "next";
         return (
@@ -52,9 +75,10 @@ function Hero() {
   const { settings, collections } = useContent();
   const status = useStudioStatus();
   const live = collections.projects.filter((p) => p.liveUrl).slice(0, 2);
+  const pauseOffscreen = usePauseOffscreen(); // headline shimmer, floating cards and pulses stop once scrolled away
 
   return (
-    <section className="relative flex min-h-[100svh] items-center overflow-hidden pt-36 pb-20 lg:pt-32">
+    <section ref={pauseOffscreen} className="relative flex min-h-[100svh] items-center overflow-hidden pt-36 pb-20 lg:pt-32">
       <div className="pointer-events-none absolute inset-0 lg:left-[36%]">
         <HeroCanvas className="hero-canvas h-full w-full opacity-45 lg:opacity-100" />
       </div>

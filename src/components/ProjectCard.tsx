@@ -1,21 +1,23 @@
 import type { Project } from "../data/types";
 import { Link } from "../lib/router";
 import { track } from "../lib/api";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { Icon } from "./Icons";
 import ProjectVisual from "./ProjectVisual";
 import { cn } from "../utils/cn";
 
 export function StatusPill({ status }: { status: string }) {
   const live = /live/i.test(status);
+  const pauseOffscreen = usePauseOffscreen<HTMLSpanElement>();
   // Solid backing so the pill stays legible over bright screenshots.
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border bg-ink-950/90 px-2.5 py-1 font-mono text-[10px] tracking-[0.14em] uppercase shadow-lg backdrop-blur-md",
+        "inline-flex items-center gap-1.5 rounded-full border bg-ink-950/90 px-2.5 py-1 font-mono text-[10px] tracking-[0.14em] uppercase shadow-lg",
         live ? "border-sage/40 text-[#d6f0de]" : "border-gold-300/40 text-gold-100",
       )}
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full", live ? "bg-sage animate-pulse-dot" : "bg-gold-300")} />
+      <span ref={pauseOffscreen} className={cn("h-1.5 w-1.5 rounded-full", live ? "bg-sage animate-pulse-dot" : "bg-gold-300")} />
       {status}
     </span>
   );
@@ -95,7 +97,7 @@ export default function ProjectCard({ project, className }: { project: Project; 
           <ProjectLinks project={project} />
           <Link
             to={`/work/${project.id}`}
-            className="inline-flex shrink-0 items-center gap-1.5 text-[12.5px] font-semibold text-gold-200 transition-all hover:gap-2.5"
+            className="-my-2 inline-flex shrink-0 items-center gap-1.5 py-2 text-[12.5px] font-semibold text-gold-200 transition-all hover:gap-2.5"
           >
             Case study <Icon name="arrow" className="h-3.5 w-3.5" />
           </Link>

@@ -261,7 +261,7 @@ export default function Contact() {
                       </span>
                       <span className="min-w-0">
                         <span className="block text-[11px] text-smoke">{l.label}</span>
-                        <span className="block truncate text-[13.5px] font-semibold text-parchment">{l.value}</span>
+                        <span className="block text-[13.5px] font-semibold text-parchment [overflow-wrap:anywhere]">{l.value}</span>
                       </span>
                     </a>
                   ))}
@@ -271,7 +271,7 @@ export default function Contact() {
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[11px] text-smoke">Video call</span>
-                      <span className="block truncate text-[13.5px] font-semibold text-parchment">Book a free 30-min slot →</span>
+                      <span className="block text-[13.5px] font-semibold text-parchment">Book a free 30-min slot →</span>
                     </span>
                   </Link>
                 </div>

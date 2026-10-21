@@ -1,5 +1,77 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------
+   Fonts — self-hosted (public/fonts, SIL Open Font License), same files
+   Google Fonts serves. Same-origin + <link rel="preload"> in index.html
+   means no extra connections and no late font swaps re-laying out the
+   whole page on phones. Latin-ext only downloads when its characters
+   (e.g. ₹) are on the page.
+   ------------------------------------------------------------------ */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/fraunces-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/fraunces-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: italic;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/fraunces-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Fraunces";
+  font-style: italic;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url("/fonts/fraunces-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/manrope-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Manrope";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/manrope-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 /* ==================================================================
    Novaframe Studio — "Noir & Champagne" design system
    ------------------------------------------------------------------
@@ -63,6 +135,56 @@
     background-color: #080706;
     color-scheme: dark;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Touch screens: a subtle gold flash the browser paints the instant a finger lands,
+     so every tap gets feedback even before JavaScript responds. */
+  @media (hover: none) {
+    html {
+      -webkit-tap-highlight-color: rgba(212, 173, 102, 0.16);
+    }
+  }
+
+  /* No double-tap-to-zoom wait on controls: taps fire immediately. */
+  :where(a, button, input, select, textarea, label, summary, [role="button"]) {
+    touch-action: manipulation;
+  }
+
+  /* iOS Safari zooms the page into any field under 16px. Keep fields at 16px on touch screens. */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Grid children may shrink below their content (long titles, e-mail addresses, nowrap rows),
+     so one long line can't push a single-column phone layout wider than the screen. */
+  .grid > * {
+    min-width: 0;
+  }
+
+  /* Long pages (the home page is ~25,000px tall on a phone): sections that are off screen skip
+     style, layout, paint — and their animations — until they're about to scroll into view.
+     `auto` remembers each section's real height once it has rendered. */
+  #main > section,
+  .cv-auto {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 900px;
+  }
+  /* While an in-page link scrolls (see scrollToId), everything renders so the target is measured exactly. */
+  .cv-measure #main > section,
+  .cv-measure .cv-auto {
+    content-visibility: visible;
+  }
+  @media print {
+    #main > section,
+    .cv-auto {
+      content-visibility: visible;
+    }
   }
 
   body {
@@ -155,17 +277,18 @@
     z-index: 0;
     pointer-events: none;
     overflow: hidden;
+    contain: strict;
     background:
       radial-gradient(1200px 720px at 78% -18%, rgba(195, 149, 74, 0.13), transparent 62%),
       radial-gradient(900px 640px at -10% 30%, rgba(124, 92, 46, 0.1), transparent 60%),
       radial-gradient(1000px 700px at 50% 120%, rgba(195, 149, 74, 0.07), transparent 60%),
       #080706;
   }
+  /* The radial gradients are already soft-edged, so no blur filter: a blurred, constantly
+     moving layer is re-filtered by the GPU on every frame. */
   .nf-glow {
     position: absolute;
     border-radius: 9999px;
-    will-change: transform;
-    filter: blur(10px);
   }
   .nf-glow-a {
     width: 46vmax;
@@ -173,7 +296,8 @@
     right: -14vmax;
     top: -18vmax;
     background: radial-gradient(closest-side, rgba(212, 173, 102, 0.16), transparent 72%);
-    animation: drift-a 32s ease-in-out infinite alternate;
+    /* Stepped: ~5 updates a second instead of 60. Each step moves a soft 600px glow by <1px. */
+    animation: drift-a 32s steps(160) infinite alternate;
   }
   .nf-glow-b {
     width: 40vmax;
@@ -181,7 +305,7 @@
     left: -16vmax;
     top: 38vh;
     background: radial-gradient(closest-side, rgba(162, 120, 58, 0.12), transparent 72%);
-    animation: drift-b 38s ease-in-out infinite alternate;
+    animation: drift-b 38s steps(190) infinite alternate;
   }
   .nf-lines {
     position: absolute;
@@ -193,7 +317,8 @@
   }
   .nf-grain {
     position: absolute;
-    inset: -50%;
+    /* 10% bleed covers the ±3.6% jitter of the grain animation (was 50%: a layer 4x the screen) */
+    inset: -10%;
     opacity: 0.06;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.92 0 0 0 0 0.8 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size: 180px 180px;
@@ -224,12 +349,23 @@
       box-shadow 0.6s ease,
       background-color 0.45s ease;
   }
-  .lux-hover:hover {
-    transform: translateY(-4px);
-    border-color: rgba(227, 200, 140, 0.32);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 240, 210, 0.08),
-      0 44px 80px -42px rgba(195, 149, 74, 0.38);
+  /* Hover effects only where a real hover exists. On touch screens a tap would otherwise
+     leave cards "stuck" lifted and make some taps register as hovers instead of clicks. */
+  @media (hover: hover) {
+    .lux-hover:hover {
+      transform: translateY(-4px);
+      border-color: rgba(227, 200, 140, 0.32);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 240, 210, 0.08),
+        0 44px 80px -42px rgba(195, 149, 74, 0.38);
+    }
+  }
+  @media (hover: none) {
+    .lux-hover:active {
+      transform: scale(0.99);
+      border-color: rgba(227, 200, 140, 0.28);
+      transition-duration: 0.12s;
+    }
   }
   .lux-panel {
     background: linear-gradient(180deg, rgba(30, 27, 23, 0.97), rgba(15, 13, 11, 0.98));
@@ -316,13 +452,15 @@
     bottom: 12px;
     border-width: 0 1px 1px 0;
   }
-  .ticks:hover::before,
-  .ticks:hover::after,
-  .group:hover > .ticks::before,
-  .group:hover > .ticks::after {
-    width: 24px;
-    height: 24px;
-    border-color: rgba(240, 220, 171, 0.95);
+  @media (hover: hover) {
+    .ticks:hover::before,
+    .ticks:hover::after,
+    .group:hover > .ticks::before,
+    .group:hover > .ticks::after {
+      width: 24px;
+      height: 24px;
+      border-color: rgba(240, 220, 171, 0.95);
+    }
   }
 
   /* Pointer spotlight — child element driven by --mx / --my */
@@ -336,8 +474,10 @@
     background: radial-gradient(380px circle at var(--mx, 50%) var(--my, 50%), rgba(212, 173, 102, 0.11), transparent 65%);
     z-index: 0;
   }
-  .group:hover > .spot {
-    opacity: 1;
+  @media (hover: hover) {
+    .group:hover > .spot {
+      opacity: 1;
+    }
   }
 
   /* ---------- Buttons ---------- */
@@ -391,43 +531,58 @@
       0 0 0 1px rgba(163, 120, 58, 0.7),
       0 14px 32px -16px rgba(212, 173, 102, 0.85);
   }
-  .btn-gold:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.05) saturate(1.05);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 250, 235, 0.85),
-      inset 0 -1px 0 rgba(92, 62, 22, 0.45),
-      0 0 0 1px rgba(184, 137, 63, 0.85),
-      0 20px 46px -16px rgba(212, 173, 102, 0.95);
-  }
   .btn-line {
     color: #f3eee5;
     background: rgba(243, 238, 229, 0.025);
     box-shadow: inset 0 0 0 1px rgba(227, 200, 140, 0.32);
   }
-  .btn-line:hover {
-    color: #fffaf0;
-    background: rgba(227, 200, 140, 0.07);
-    box-shadow:
-      inset 0 0 0 1px rgba(227, 200, 140, 0.75),
-      0 12px 30px -18px rgba(212, 173, 102, 0.7);
-  }
   .btn-ghost {
     color: #ddd5c6;
     background: transparent;
-  }
-  .btn-ghost:hover {
-    color: #fffaf0;
-    background: rgba(227, 200, 140, 0.07);
   }
   .btn-danger {
     color: #ffd9cc;
     background: rgba(228, 138, 108, 0.1);
     box-shadow: inset 0 0 0 1px rgba(228, 138, 108, 0.35);
   }
-  .btn-danger:hover {
-    background: rgba(228, 138, 108, 0.18);
-    box-shadow: inset 0 0 0 1px rgba(228, 138, 108, 0.7);
+  @media (hover: hover) {
+    .btn-gold:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.05) saturate(1.05);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 250, 235, 0.85),
+        inset 0 -1px 0 rgba(92, 62, 22, 0.45),
+        0 0 0 1px rgba(184, 137, 63, 0.85),
+        0 20px 46px -16px rgba(212, 173, 102, 0.95);
+    }
+    .btn-line:hover {
+      color: #fffaf0;
+      background: rgba(227, 200, 140, 0.07);
+      box-shadow:
+        inset 0 0 0 1px rgba(227, 200, 140, 0.75),
+        0 12px 30px -18px rgba(212, 173, 102, 0.7);
+    }
+    .btn-ghost:hover {
+      color: #fffaf0;
+      background: rgba(227, 200, 140, 0.07);
+    }
+    .btn-danger:hover {
+      background: rgba(228, 138, 108, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(228, 138, 108, 0.7);
+    }
+  }
+  /* Touch: instant pressed state instead of hover */
+  @media (hover: none) {
+    .btn:active {
+      transition-duration: 0.08s;
+    }
+    .btn-gold:active {
+      filter: brightness(0.94);
+    }
+    .btn-line:active,
+    .btn-ghost:active {
+      background: rgba(227, 200, 140, 0.1);
+    }
   }
   .btn-icon {
     display: inline-grid;
@@ -450,8 +605,10 @@
     transform: skewX(-20deg);
     pointer-events: none;
   }
-  .shine:hover::after {
-    animation: sweep 1s var(--ease);
+  @media (hover: hover) {
+    .shine:hover::after {
+      animation: sweep 1s var(--ease);
+    }
   }
 
   /* ---------- Typography ---------- */
@@ -483,7 +640,8 @@
     background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
-    animation: sheen 7s linear infinite;
+    /* Repaints text on every update, so 30 updates a second (steps) rather than 60+. */
+    animation: sheen 7s steps(210) infinite;
   }
   .eyebrow {
     display: inline-flex;
@@ -544,9 +702,12 @@
   .glow-orb {
     position: absolute;
     border-radius: 9999px;
-    filter: blur(110px);
     pointer-events: none;
     opacity: 0.55;
+    /* Soft glow drawn as a radial gradient (see <Glow>) instead of filter: blur(110px),
+       which is one of the most expensive things a phone GPU can be asked to paint.
+       Scaled up so the falloff covers the same area the blur used to. */
+    scale: 1.7;
   }
   .wordmark-outline {
     color: transparent;
@@ -603,10 +764,16 @@
       color 0.25s ease,
       transform 0.3s var(--ease);
   }
-  .choice:hover {
-    border-color: rgba(227, 200, 140, 0.3);
-    background: rgba(255, 244, 222, 0.045);
-    color: #f3eee5;
+  .choice:active {
+    transform: scale(0.985);
+    transition-duration: 0.08s;
+  }
+  @media (hover: hover) {
+    .choice:hover {
+      border-color: rgba(227, 200, 140, 0.3);
+      background: rgba(255, 244, 222, 0.045);
+      color: #f3eee5;
+    }
   }
   .choice[aria-pressed="true"],
   .choice[aria-checked="true"] {
@@ -640,8 +807,10 @@
   .field::placeholder {
     color: #6d665c;
   }
-  .field:hover {
-    border-color: rgba(227, 200, 140, 0.24);
+  @media (hover: hover) {
+    .field:hover {
+      border-color: rgba(227, 200, 140, 0.24);
+    }
   }
   .field:focus {
     outline: none;
@@ -729,23 +898,34 @@
     object-fit: cover;
     object-position: 50% 0%;
     transition:
-      object-position 6s cubic-bezier(0.45, 0, 0.2, 1),
       transform 1.1s var(--ease),
       filter 0.6s ease;
     filter: saturate(0.92) brightness(0.94);
   }
-  .group:hover .shot {
-    filter: saturate(1.05) brightness(1);
+  /* Only tall captures pan on hover. Keeping the 6s object-position transition off wide images
+     stops it from replaying (and repainting for 6 seconds) every time one loads. */
+  .shot-scroll {
+    transition:
+      object-position 6s cubic-bezier(0.45, 0, 0.2, 1),
+      transform 1.1s var(--ease),
+      filter 0.6s ease;
   }
-  .group:hover .shot-scroll {
-    object-position: 50% 100%;
+  @media (hover: hover) {
+    .group:hover .shot {
+      filter: saturate(1.05) brightness(1);
+    }
+    .group:hover .shot-scroll {
+      object-position: 50% 100%;
+    }
   }
   /* Wide captures keep the brand/nav corner (top-left) in frame. */
   .shot-wide {
     object-position: 0% 0%;
   }
-  .group:hover .shot-zoom {
-    transform: scale(1.035);
+  @media (hover: hover) {
+    .group:hover .shot-zoom {
+      transform: scale(1.035);
+    }
   }
 
   /* ---------- Rotating headline words ---------- */
@@ -780,7 +960,8 @@
   /* ---------- Motion ---------- */
   .reveal {
     opacity: 0;
-    transform: translate3d(0, 26px, 0);
+    /* 2D on purpose: translate3d() forced every not-yet-revealed block onto its own GPU layer */
+    transform: translateY(26px);
     transition:
       opacity 1s var(--ease),
       transform 1s var(--ease);
@@ -801,8 +982,19 @@
   .animate-spin-slow {
     animation: spin 28s linear infinite;
   }
+  /* Live-status pulse: an expanding ring on its own pseudo-element. Animating transform/opacity
+     runs on the compositor; the old box-shadow keyframes repainted the page every frame. */
   .animate-pulse-dot {
-    animation: pulse-dot 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+    position: relative;
+  }
+  .animate-pulse-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: rgba(143, 196, 162, 0.55);
+    pointer-events: none;
+    animation: pulse-ring 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
   }
   .bar-grow {
     transform-origin: left center;
@@ -822,8 +1014,10 @@
     animation-direction: reverse;
     animation-duration: 65s;
   }
-  .marquee-mask:hover .marquee-track {
-    animation-play-state: paused;
+  @media (hover: hover) {
+    .marquee-mask:hover .marquee-track {
+      animation-play-state: paused;
+    }
   }
 
   /* ---------- Hero ---------- */
@@ -968,15 +1162,15 @@
     transform: rotate(360deg);
   }
 }
-@keyframes pulse-dot {
+@keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(143, 196, 162, 0.6);
+    transform: scale(1);
+    opacity: 0.9;
   }
-  70% {
-    box-shadow: 0 0 0 9px rgba(143, 196, 162, 0);
-  }
+  70%,
   100% {
-    box-shadow: 0 0 0 0 rgba(143, 196, 162, 0);
+    transform: scale(3.4);
+    opacity: 0;
   }
 }
 @keyframes marquee {
@@ -1048,6 +1242,67 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Phones, tablets and touch screens: same look, a fraction of the    */
+/* GPU and main-thread work. Ambient loops that never stop (drifting  */
+/* glows, film-grain jitter, animated gradient text and borders) are  */
+/* frozen, and frosted glass becomes near-opaque — backdrop blur is   */
+/* re-computed on every scrolled frame and is what made phones lag.   */
+/* ------------------------------------------------------------------ */
+@media (hover: none), (pointer: coarse), (max-width: 767px) {
+  .nf-glow,
+  .nf-grain {
+    animation: none;
+  }
+  .nf-grain {
+    inset: 0;
+  }
+  .text-gold-shine,
+  .gold-orbit::after {
+    animation: none;
+  }
+  .lux-glass {
+    background: rgba(13, 12, 10, 0.94);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .page-enter {
+    animation-duration: 0.45s;
+  }
+}
+
+/* Desktop: the rotating headline only animates the word that is showing. */
+.rotator > span:not([data-state="active"]) {
+  animation-play-state: paused;
+}
+
+/* Never animate what can't be seen. Looping animations inside closed menus/panels (visibility:
+   hidden), blocks still waiting to reveal (opacity: 0) or anything scrolled off screen (marked
+   `data-offscreen` by usePauseOffscreen) were ticked by the browser on every frame anyway — enough to
+   keep a phone's main thread busy full-time while the page sat idle. Removing the animation (rather
+   than pausing it) also lets it restart on the compositor when it comes back into view. */
+.invisible .animate-pulse-dot::after,
+.reveal:not(.reveal-in) .animate-pulse-dot::after,
+.animate-pulse-dot[data-offscreen]::after,
+[data-offscreen] .animate-pulse-dot::after,
+[data-offscreen] > .marquee-track,
+[data-offscreen] .marquee-track,
+.reveal:not(.reveal-in) .marquee-track,
+.invisible .animate-pulse,
+.reveal:not(.reveal-in) .animate-pulse,
+[data-offscreen] .animate-pulse,
+.reveal:not(.reveal-in) .animate-spin-slow,
+[data-offscreen] .animate-spin-slow,
+[data-offscreen] .animate-floaty,
+[data-offscreen] .animate-floaty-slow,
+.reveal:not(.reveal-in).gold-orbit::after,
+.reveal:not(.reveal-in) .gold-orbit::after,
+[data-offscreen] .gold-orbit::after,
+.reveal:not(.reveal-in) .text-gold-shine,
+[data-offscreen] .text-gold-shine {
+  animation: none;
+}
+
+/* ------------------------------------------------------------------ */
 /* Reduced motion                                                     */
 /* ------------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
@@ -1069,7 +1324,7 @@
   .animate-floaty,
   .animate-floaty-slow,
   .animate-spin-slow,
-  .animate-pulse-dot,
+  .animate-pulse-dot::after,
   .page-enter,
   .bar-grow,
   .text-gold-shine,

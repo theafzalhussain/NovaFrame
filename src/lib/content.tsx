@@ -5,7 +5,7 @@
  *   2. Fetches GET /api/content and swaps in the database version
  *   3. Re-fetches when the admin saves (same tab), another tab changes, or the tab regains focus
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { blanks } from "../data/blanks";
 import { defaultContent } from "../data/defaults";
 import { COLLECTION_NAMES, type CollectionName, type Collections, type SiteContent } from "../data/types";
@@ -45,47 +45,72 @@ export function normalizeContent(input: Partial<SiteContent> | null | undefined)
   };
 }
 
-function readCache(): SiteContent | null {
+function readCacheRaw(): string | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    return localStorage.getItem(CACHE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function readCache(raw = readCacheRaw()): SiteContent | null {
+  try {
     return raw ? (JSON.parse(raw) as SiteContent) : null;
   } catch {
     return null;
   }
 }
 
-function writeCache(content: SiteContent) {
+function writeCache(json: string) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(content));
+    localStorage.setItem(CACHE_KEY, json);
   } catch {
     /* storage full / private mode */
   }
 }
 
-function initialState(): { content: SiteContent; source: ContentSource } {
-  if (isDemoSession() && localContentModified()) return { content: normalizeContent(localContentSnapshot()), source: "local" };
-  const cached = readCache();
-  if (cached) return { content: normalizeContent(cached), source: "cache" };
-  if (localContentModified()) return { content: normalizeContent(localContentSnapshot()), source: "local" };
-  return { content: defaultContent, source: "defaults" };
+type State = { content: SiteContent; source: ContentSource; /** JSON of the live snapshot on screen, if known */ json: string | null };
+
+function initialState(): State {
+  if (isDemoSession() && localContentModified()) return { content: normalizeContent(localContentSnapshot()), source: "local", json: null };
+  const raw = readCacheRaw();
+  const cached = readCache(raw);
+  if (cached) return { content: normalizeContent(cached), source: "cache", json: raw };
+  if (localContentModified()) return { content: normalizeContent(localContentSnapshot()), source: "local", json: null };
+  return { content: defaultContent, source: "defaults", json: null };
 }
 
 const ContentContext = createContext<ContentValue>({ ...defaultContent, source: "defaults", refresh: async () => {} });
 
 export function ContentProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(initialState);
+  const shownJson = useRef(state.json);
+  const shown = useRef(state.content);
+  shown.current = state.content;
 
   const refresh = useCallback(async () => {
     const res = await api.content();
     if (!res.ok || !res.data) return;
     if (!res.offline) {
       const { settings, advanced, collections } = res.data;
-      writeCache({ settings, advanced, collections });
-      setState({ content: normalizeContent(res.data), source: "live" });
+      const json = JSON.stringify({ settings, advanced, collections });
+      // Unchanged since the copy on screen: skip the cache write and the whole-site re-render.
+      // (This runs on every page load and every time the tab regains focus.)
+      if (json === shownJson.current) return;
+      const next = normalizeContent(res.data);
+      shownJson.current = json;
+      writeCache(json);
+      // First visit: the page rendered from the shipped defaults. If the live content is identical,
+      // keep what's on screen instead of re-rendering (and re-laying out) the whole page.
+      if (JSON.stringify(next) === JSON.stringify(shown.current)) return;
+      setState({ content: next, source: "live", json });
       return;
     }
     // API unreachable — keep the last live copy unless the demo workspace is in use.
-    if (isDemoSession() || !readCache()) setState({ content: normalizeContent(res.data), source: "local" });
+    if (isDemoSession() || !readCacheRaw()) {
+      shownJson.current = null;
+      setState({ content: normalizeContent(res.data), source: "local", json: null });
+    }
   }, []);
 
   useEffect(() => {

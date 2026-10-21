@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSettings } from "../lib/content";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { studioStatus } from "../lib/site";
 import { cn } from "../utils/cn";
 
@@ -16,8 +17,10 @@ export function useStudioStatus() {
 }
 
 export function StatusDot({ online, className }: { online: boolean; className?: string }) {
+  const pauseOffscreen = usePauseOffscreen<HTMLSpanElement>();
   return (
     <span
+      ref={pauseOffscreen}
       className={cn("inline-block h-2 w-2 shrink-0 rounded-full", online ? "bg-sage animate-pulse-dot" : "bg-smoke", className)}
       aria-hidden
     />

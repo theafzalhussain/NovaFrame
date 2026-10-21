@@ -20,16 +20,23 @@ export default function QuickDock() {
 
   useEffect(() => {
     // Show after the hero; step aside near the footer, which has every contact option.
-    const onScroll = () => {
+    // rAF-throttled: at most one check per frame instead of one per scroll event.
+    let raf = 0;
+    const update = () => {
+      raf = 0;
       const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 760;
       setVisible(window.scrollY > 520 && !nearBottom);
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, []);
 
@@ -54,19 +61,25 @@ export default function QuickDock() {
     { label: `Call ${settings.phone}`, hint: settings.hours, icon: "call", href: phoneHref(settings.phone) },
   ];
 
+  const shown = visible || open;
+
   return (
+    // The wrapper is click-through: it is as wide as the (hidden) panel, and used to swallow every
+    // tap on the page beneath it — links, buttons and inputs in the lower part of the screen.
+    // Only the button, and the panel while open, take pointer input.
     <aside
       ref={panelRef}
       aria-label="Contact concierge"
+      inert={!shown}
       className={cn(
-        "fixed right-4 bottom-5 z-40 flex flex-col items-end gap-3 transition-all duration-500 sm:right-6 sm:bottom-6",
-        visible || open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-8 opacity-0",
+        "pointer-events-none fixed right-4 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-40 flex flex-col items-end gap-3 transition-[opacity,translate] duration-500 sm:right-6 sm:bottom-6",
+        shown ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0",
       )}
     >
       <div
         className={cn(
-          "lux-panel w-[300px] origin-bottom-right rounded-[22px] p-2 transition-all duration-400",
-          open ? "visible scale-100 opacity-100" : "invisible scale-95 opacity-0",
+          "lux-panel w-[300px] max-w-[calc(100vw-2rem)] origin-bottom-right rounded-[22px] p-2 transition-[opacity,scale,visibility] duration-400",
+          open ? "pointer-events-auto visible scale-100 opacity-100" : "invisible scale-95 opacity-0",
         )}
       >
         <div className="flex items-center gap-3 border-b border-gold-300/10 px-3 pt-2 pb-3.5">
@@ -116,7 +129,7 @@ export default function QuickDock() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={open ? "Close contact options" : "Open contact options"}
-        className="btn btn-gold shine h-14 rounded-full pr-5 pl-2 shadow-2xl"
+        className="btn btn-gold shine pointer-events-auto h-14 rounded-full pr-5 pl-2 shadow-2xl max-sm:pr-2"
       >
         <span className="grid h-10 w-10 place-items-center rounded-full bg-ink-950/90 text-gold-300">
           <Icon name={open ? "close" : "chat"} className="h-[18px] w-[18px]" />

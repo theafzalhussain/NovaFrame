@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import ProjectCard from "../components/ProjectCard";
 import { Button, PageHero, Reveal, SectionHeading } from "../components/ui";
 import { useContent } from "../lib/content";
+import { usePauseOffscreen } from "../lib/onscreen";
 import { cn } from "../utils/cn";
 
 export default function Portfolio() {
@@ -14,6 +15,7 @@ export default function Portfolio() {
   const live = projects.filter((p) => p.liveUrl).length;
   const repos = projects.filter((p) => p.repoUrl).length;
   const github = settings.socials.find((s) => s.icon === "github")?.href;
+  const ctaRef = usePauseOffscreen(); // animated gold border runs only while the CTA is visible
 
   return (
     <>
@@ -82,7 +84,7 @@ export default function Portfolio() {
         </div>
       </section>
 
-      <section className="pb-28">
+      <section ref={ctaRef} className="pb-28">
         <div className="shell">
           <Reveal>
             <div className="lux-card gold-orbit relative overflow-hidden p-10 text-center md:p-16">

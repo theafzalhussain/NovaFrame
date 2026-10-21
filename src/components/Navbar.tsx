@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useRouter } from "../lib/router";
 import { useContent } from "../lib/content";
 import { availabilityLabel, isActivePath, navLinks, whatsappLink } from "../lib/site";
@@ -16,7 +16,9 @@ export default function Navbar() {
   const services = collections.services;
   const status = useStudioStatus();
   const [scrolled, setScrolled] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<HTMLDivElement | null>(null);
+  const megaWrapRef = useRef<HTMLDivElement | null>(null);
+  const megaPanelRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [mega, setMega] = useState(false);
   const [announceHidden, setAnnounceHidden] = useState(() => {
@@ -27,20 +29,31 @@ export default function Navbar() {
     }
   });
 
-  const showAnnounce = settings.announcement.enabled && settings.announcement.text && !announceHidden;
+  // Hidden while the mobile menu is open so the menu panel (pinned under a 76px bar) never covers the bar.
+  const showAnnounce = settings.announcement.enabled && settings.announcement.text && !announceHidden && !open;
 
   useEffect(() => {
-    const onScroll = () => {
-      setScrolled(window.scrollY > 24);
+    // The progress bar is written straight to the DOM once per frame. Keeping it in React state
+    // re-rendered the whole navbar on every scroll event, which made scrolling and taps lag on phones.
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const y = window.scrollY;
+      setScrolled(y > 24); // no re-render unless it flips
       const max = document.documentElement.scrollHeight - window.innerHeight;
-      setProgress(max > 0 ? Math.min(window.scrollY / max, 1) : 0);
+      const p = max > 0 ? Math.min(y / max, 1) : 0;
+      if (progressRef.current) progressRef.current.style.transform = `scaleX(${p})`;
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, []);
 
@@ -48,6 +61,25 @@ export default function Navbar() {
     setOpen(false);
     setMega(false);
   }, [path]);
+
+  // The services panel is centred under its button, which sits left of centre — on 1024–1366px
+  // screens that pushed the panel's left edge off screen. Nudge it back inside before it paints.
+  useLayoutEffect(() => {
+    if (!mega) return;
+    const place = () => {
+      const wrap = megaWrapRef.current;
+      const panel = megaPanelRef.current;
+      if (!wrap || !panel) return;
+      const r = wrap.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const centred = r.left + r.width / 2 - width / 2;
+      const left = Math.max(24, Math.min(centred, window.innerWidth - 24 - width));
+      panel.style.marginLeft = `${Math.round(left - centred)}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [mega]);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -97,7 +129,12 @@ export default function Navbar() {
               {settings.announcement.linkLabel || "Learn more"} →
             </Link>
           ) : null}
-          <button type="button" onClick={dismiss} aria-label="Dismiss announcement" className="ml-1 shrink-0 text-smoke hover:text-ivory">
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss announcement"
+            className="relative ml-1 shrink-0 text-smoke after:absolute after:-inset-3 after:content-[''] hover:text-ivory"
+          >
             <Icon name="close" className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -105,22 +142,39 @@ export default function Navbar() {
 
       <div
         className={cn(
-          "relative border-b transition-all duration-500",
-          scrolled || open ? "border-gold-300/10 bg-ink-950/80 backdrop-blur-xl" : "border-transparent bg-transparent",
+          "relative z-[2] border-b transition-[background-color,border-color] duration-500",
+          // Frosted glass only with a mouse: backdrop blur is re-computed on every scrolled frame,
+          // which phones can't afford. Touch screens get a near-opaque bar instead.
+          scrolled || open
+            ? "border-gold-300/10 bg-ink-950/95 pointer-fine:bg-ink-950/80 pointer-fine:backdrop-blur-xl"
+            : "border-transparent bg-transparent",
         )}
       >
         <nav className="shell flex h-[76px] items-center justify-between gap-4" aria-label="Primary">
           <Logo />
 
           <div className="hidden items-center gap-1 lg:flex">
-            {/* Services menu */}
-            <div className="relative" onMouseEnter={() => setMega(true)} onMouseLeave={() => setMega(false)}>
+            {/* Services menu: opens on mouse hover or click. Touch only toggles on tap — a touch
+                "hover" followed by the click used to open and immediately close it again. */}
+            <div
+              ref={megaWrapRef}
+              className="relative"
+              onPointerEnter={(e) => e.pointerType === "mouse" && setMega(true)}
+              onPointerLeave={(e) => e.pointerType === "mouse" && setMega(false)}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setMega(false);
+              }}
+            >
               <button
                 type="button"
                 aria-expanded={mega}
                 aria-haspopup="true"
-                onClick={() => setMega((v) => !v)}
-                onFocus={() => setMega(true)}
+                onClick={(e) => {
+                  // With a mouse the menu is already open from hovering, so a click keeps it open;
+                  // touch and keyboard toggle it.
+                  const viaMouse = (e.nativeEvent as PointerEvent).pointerType === "mouse";
+                  setMega((v) => (viaMouse ? true : !v));
+                }}
                 className={cn(
                   "flex items-center gap-1.5 rounded-full px-4 py-2 text-[13.5px] font-semibold tracking-[0.01em] transition-colors",
                   mega || isActivePath(path, "/services") ? "text-gold-200" : "text-sand hover:text-ivory",
@@ -131,8 +185,9 @@ export default function Navbar() {
               </button>
 
               <div
+                ref={megaPanelRef}
                 className={cn(
-                  "absolute top-full left-1/2 w-[760px] -translate-x-1/2 pt-4 transition-all duration-300",
+                  "absolute top-full left-1/2 w-[min(760px,calc(100vw-3rem))] -translate-x-1/2 pt-4 transition-[opacity,translate,visibility] duration-300",
                   mega ? "visible translate-y-0 opacity-100" : "invisible -translate-y-2 opacity-0",
                 )}
               >
@@ -238,14 +293,18 @@ export default function Navbar() {
         </nav>
 
         <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px">
-          <div className="h-full bg-gradient-to-r from-gold-700 via-gold-300 to-gold-500 transition-[width] duration-150" style={{ width: `${progress * 100}%` }} />
+          <div
+            ref={progressRef}
+            className="h-full w-full origin-left bg-gradient-to-r from-gold-700 via-gold-300 to-gold-500"
+            style={{ transform: "scaleX(0)" }}
+          />
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile menu (sits under the bar; the bar stays on top so its close button is always tappable) */}
       <div
         className={cn(
-          "fixed inset-x-0 top-[76px] bottom-0 overflow-y-auto bg-ink-950/98 backdrop-blur-xl transition-all duration-500 lg:hidden",
+          "fixed inset-x-0 top-[76px] bottom-0 z-[1] overflow-y-auto overscroll-contain bg-ink-950 transition-[opacity,visibility] duration-500 lg:hidden",
           open ? "visible opacity-100" : "invisible opacity-0",
         )}
       >

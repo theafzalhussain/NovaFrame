@@ -47,9 +47,8 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     const onHash = () => {
       const raw = window.location.hash.replace(/^#/, "");
       if (raw && !raw.startsWith("/")) {
-        const target = document.getElementById(decodeURIComponent(raw));
         window.history.replaceState(null, "", `#${pathRef.current}`);
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollToId(decodeURIComponent(raw));
         return;
       }
       setLoc(readLocation());
@@ -113,7 +112,25 @@ export function Link({ to, children, onClick, ...rest }: LinkProps) {
   );
 }
 
-/** Smooth-scroll to an element on the current page (hash-router safe). */
-export function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+/**
+ * Smooth-scroll to an element on the current page (hash-router safe).
+ * Off-screen page sections skip rendering (`content-visibility: auto`) and only carry estimated
+ * heights, so they are rendered for the duration of the scroll — otherwise a long scroll on a phone
+ * would land short of its target.
+ */
+export function scrollToId(id: string, block: ScrollLogicalPosition = "start") {
+  const target = document.getElementById(id);
+  if (!target) return;
+  const root = document.documentElement;
+  root.classList.add("cv-measure");
+  void root.offsetHeight; // lay out with real section heights before measuring the target
+  target.scrollIntoView({ behavior: "smooth", block });
+  let timer = 0;
+  const done = () => {
+    window.clearTimeout(timer);
+    window.removeEventListener("scrollend", done);
+    root.classList.remove("cv-measure");
+  };
+  window.addEventListener("scrollend", done, { once: true });
+  timer = window.setTimeout(done, 2000);
 }
