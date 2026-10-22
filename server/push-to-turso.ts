@@ -53,9 +53,13 @@ const TABLES = [
 
 const local = createClient({ url: `file:${sourcePath}` });
 
+/**
+ * Column names of a table. Uses an empty SELECT rather than
+ * `PRAGMA table_info`, because the hosted libSQL protocol restricts pragmas.
+ */
 async function columnsOf(client: typeof local, table: string): Promise<string[]> {
-  const rs = await client.execute(`PRAGMA table_info(${table})`);
-  return rs.rows.map((r) => String((r as unknown as { name: string }).name));
+  const rs = await client.execute(`SELECT * FROM ${table} LIMIT 0`);
+  return [...rs.columns];
 }
 
 async function tableExists(client: typeof local, table: string): Promise<boolean> {

@@ -459,7 +459,9 @@ export async function initDb(): Promise<void> {
   }
 
   await exec(INDEX_SQL);
-  await run("PRAGMA user_version = 2");
+  // Only a marker, never read back — and the hosted libSQL protocol rejects
+  // write pragmas, so it is set on the local file backend only.
+  if (!usingTurso) await run("PRAGMA user_version = 2");
 
   /* ---- First-run seeding (each collection auto-seeded at most once) ---- */
   const seededRow = await get<{ value: string }>("SELECT value, updated_at FROM settings WHERE key = ?", [
