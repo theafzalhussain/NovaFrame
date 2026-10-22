@@ -1,11 +1,15 @@
 /**
- * Novaframe Studio — SQLite data layer
- * ------------------------------------
+ * Novaframe Studio — SQLite / libSQL data layer
+ * ----------------------------------------------
  * Relational tables for transactional data (leads, bookings, users,
  * sessions, audit, analytics) and a document table for editorial
  * content (every CMS collection) plus a key/value settings table.
+ *
+ * Uses @libsql/client so the same code runs against a local SQLite
+ * file in development and a hosted Turso database in production.
+ * Every query is asynchronous and must be awaited.
  */
-import Database from "better-sqlite3";
+import { createClient, type Client, type InArgs } from "@libsql/client";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -15,16 +19,71 @@ import { defaultContent } from "../src/data/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "novaframe.db");
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-export const db = new Database(DB_PATH);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
-db.pragma("synchronous = NORMAL");
+/**
+ * In production (TURSO_DATABASE_URL set) the client talks to the hosted
+ * Turso database. Otherwise it falls back to a local libSQL file so dev
+ * and `npm run server` work offline without any Turso credentials.
+ */
+export const usingTurso = Boolean(process.env.TURSO_DATABASE_URL);
+if (!usingTurso) {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+}
+
+export const db: Client = usingTurso
+  ? createClient({ url: process.env.TURSO_DATABASE_URL as string, authToken: process.env.TURSO_AUTH_TOKEN })
+  : createClient({ url: `file:${DB_PATH}` });
 
 /** Day buckets for charts use the studio's offset (IST by default). */
 export const TZ_OFFSET_MINUTES = Number(process.env.TZ_OFFSET_MINUTES || 330);
 export const TZ_MOD = `${TZ_OFFSET_MINUTES >= 0 ? "+" : ""}${TZ_OFFSET_MINUTES} minutes`;
+
+/* ------------------------------------------------------------------ */
+/* Async query wrapper                                                */
+/* ------------------------------------------------------------------ */
+/**
+ * Args may be a positional array (for `?` placeholders) or a named object
+ * (for `@name` / `:name` / `$name` placeholders — libSQL strips the sigil).
+ */
+export type Args = InArgs;
+
+/** Result of a write, shaped like better-sqlite3's `RunResult`. */
+export type RunResult = { changes: number; lastInsertRowid: number };
+
+/** INSERT/UPDATE/DELETE. Returns affected-row count and the new rowid. */
+export async function run(sql: string, args?: Args): Promise<RunResult> {
+  const rs = await db.execute(args === undefined ? sql : { sql, args });
+  return {
+    changes: rs.rowsAffected,
+    lastInsertRowid: rs.lastInsertRowid === undefined ? 0 : Number(rs.lastInsertRowid),
+  };
+}
+
+/** First matching row, or undefined. libSQL rows expose named columns. */
+export async function get<T>(sql: string, args?: Args): Promise<T | undefined> {
+  const rs = await db.execute(args === undefined ? sql : { sql, args });
+  return (rs.rows[0] as T | undefined) ?? undefined;
+}
+
+/** All matching rows. */
+export async function all<T>(sql: string, args?: Args): Promise<T[]> {
+  const rs = await db.execute(args === undefined ? sql : { sql, args });
+  return rs.rows as unknown as T[];
+}
+
+/** Run a multi-statement SQL script (schema, migrations). */
+export async function exec(sql: string): Promise<void> {
+  await db.executeMultiple(sql);
+}
+
+/**
+ * Atomic batch of writes. Each statement is `[sql, args?]` or a plain SQL
+ * string. Wrapped in a write transaction — all apply or none do. A failing
+ * statement (e.g. a UNIQUE violation) rejects the returned promise.
+ */
+export async function tx(statements: Array<[string, Args?] | string>): Promise<void> {
+  await db.batch(statements, "write");
+}
 
 /* ------------------------------------------------------------------ */
 /* Schema                                                             */
@@ -53,7 +112,7 @@ const ENQUIRIES_TABLE = (name: string) => `
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );`;
 
-db.exec(`
+const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS admin_users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     email         TEXT NOT NULL UNIQUE,
@@ -178,50 +237,9 @@ db.exec(`
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
-`);
+`;
 
-/* ------------------------------------------------------------------ */
-/* Migrations for databases created by earlier versions               */
-/* ------------------------------------------------------------------ */
-function addColumn(table: string, ddl: string) {
-  try {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
-  } catch {
-    /* column already exists */
-  }
-}
-addColumn("admin_users", "active INTEGER NOT NULL DEFAULT 1");
-addColumn("audit_logs", "admin_email TEXT");
-for (const ddl of [
-  "priority TEXT NOT NULL DEFAULT 'normal'",
-  "value_estimate INTEGER",
-  "internal_notes TEXT",
-  "source TEXT NOT NULL DEFAULT 'website'",
-]) {
-  addColumn("enquiries", ddl);
-}
-addColumn("payments", "method TEXT");
-addColumn("payments", "paid_at TEXT");
-
-// Older schema restricted statuses without 'lost' — rebuild the table once if needed.
-const enquiriesSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='enquiries'").get() as { sql?: string } | undefined)?.sql ?? "";
-if (enquiriesSql && !enquiriesSql.includes("'lost'")) {
-  db.transaction(() => {
-    db.exec(ENQUIRIES_TABLE("enquiries_v2"));
-    db.exec(`
-      INSERT INTO enquiries_v2 (id, reference, name, company_name, email, phone, service, budget_range, timeline,
-        project_details, status, priority, value_estimate, internal_notes, source, ip_address, user_agent, created_at, updated_at)
-      SELECT id, reference, name, company_name, email, phone, service, budget_range, timeline,
-        project_details, status, coalesce(priority,'normal'), value_estimate, internal_notes, coalesce(source,'website'),
-        ip_address, user_agent, created_at, updated_at
-      FROM enquiries;
-      DROP TABLE enquiries;
-      ALTER TABLE enquiries_v2 RENAME TO enquiries;
-    `);
-  })();
-}
-
-db.exec(`
+const INDEX_SQL = `
   CREATE INDEX IF NOT EXISTS idx_enquiries_status  ON enquiries(status);
   CREATE INDEX IF NOT EXISTS idx_enquiries_created ON enquiries(created_at);
   CREATE INDEX IF NOT EXISTS idx_notes_enquiry     ON enquiry_notes(enquiry_id, created_at);
@@ -235,11 +253,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sessions_user     ON sessions(user_id);
   CREATE INDEX IF NOT EXISTS idx_payments_status   ON payments(status);
   CREATE INDEX IF NOT EXISTS idx_payments_created  ON payments(created_at);
-`);
-db.pragma("user_version = 2");
+`;
 
 /* ------------------------------------------------------------------ */
-/* Crypto helpers                                                     */
+/* Migrations for databases created by earlier versions               */
+/* ------------------------------------------------------------------ */
+async function addColumn(table: string, ddl: string) {
+  try {
+    await exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  } catch {
+    /* column already exists */
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Crypto helpers (pure — stay synchronous)                           */
 /* ------------------------------------------------------------------ */
 const PBKDF2_ITERATIONS = 100_000;
 
@@ -268,14 +296,8 @@ export function newReference(prefix: string) {
 /* ------------------------------------------------------------------ */
 export type SettingsKey = "site" | "advanced";
 
-const getSettingStmt = db.prepare("SELECT value, updated_at FROM settings WHERE key = ?");
-const putSettingStmt = db.prepare(`
-  INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
-  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-`);
-
-export function readSetting<T>(key: SettingsKey): T | null {
-  const row = getSettingStmt.get(key) as { value: string } | undefined;
+export async function readSetting<T>(key: SettingsKey): Promise<T | null> {
+  const row = await get<{ value: string }>("SELECT value, updated_at FROM settings WHERE key = ?", [key]);
   if (!row) return null;
   try {
     return JSON.parse(row.value) as T;
@@ -284,8 +306,12 @@ export function readSetting<T>(key: SettingsKey): T | null {
   }
 }
 
-export function writeSetting(key: SettingsKey, value: unknown) {
-  putSettingStmt.run(key, JSON.stringify(value));
+export async function writeSetting(key: SettingsKey, value: unknown): Promise<void> {
+  await run(
+    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    [key, JSON.stringify(value)],
+  );
 }
 
 export type ContentRow = {
@@ -299,32 +325,50 @@ export type ContentRow = {
 };
 
 export const contentQ = {
-  listPublished: db.prepare("SELECT * FROM content WHERE collection = ? AND published = 1 ORDER BY sort_order ASC, created_at ASC"),
-  listAll: db.prepare("SELECT * FROM content WHERE collection = ? ORDER BY sort_order ASC, created_at ASC"),
-  get: db.prepare("SELECT * FROM content WHERE collection = ? AND id = ?"),
-  maxSort: db.prepare("SELECT coalesce(max(sort_order), 0) AS m FROM content WHERE collection = ?"),
-  insert: db.prepare(`
-    INSERT INTO content (collection, id, data, sort_order, published)
-    VALUES (@collection, @id, @data, @sort_order, @published)
-  `),
-  update: db.prepare(`
-    UPDATE content SET data = @data, published = @published, sort_order = @sort_order, updated_at = datetime('now')
-    WHERE collection = @collection AND id = @id
-  `),
-  rename: db.prepare("UPDATE content SET id = ? WHERE collection = ? AND id = ?"),
-  remove: db.prepare("DELETE FROM content WHERE collection = ? AND id = ?"),
-  clear: db.prepare("DELETE FROM content WHERE collection = ?"),
-  setSort: db.prepare("UPDATE content SET sort_order = ?, updated_at = datetime('now') WHERE collection = ? AND id = ?"),
-  counts: db.prepare(`
-    SELECT collection, sum(published) AS published, count(*) AS total
-    FROM content GROUP BY collection
-  `),
-  lastUpdate: db.prepare(`
-    SELECT max(t) AS t FROM (
-      SELECT max(updated_at) AS t FROM content
-      UNION ALL SELECT max(updated_at) FROM settings
-    )
-  `),
+  listPublished: (collection: string) =>
+    all<ContentRow>(
+      "SELECT * FROM content WHERE collection = ? AND published = 1 ORDER BY sort_order ASC, created_at ASC",
+      [collection],
+    ),
+  listAll: (collection: string) =>
+    all<ContentRow>("SELECT * FROM content WHERE collection = ? ORDER BY sort_order ASC, created_at ASC", [collection]),
+  get: (collection: string, id: string) =>
+    get<ContentRow>("SELECT * FROM content WHERE collection = ? AND id = ?", [collection, id]),
+  maxSort: (collection: string) =>
+    get<{ m: number }>("SELECT coalesce(max(sort_order), 0) AS m FROM content WHERE collection = ?", [collection]),
+  insert: (args: { collection: string; id: string; data: string; sort_order: number; published: number }) =>
+    run(
+      `INSERT INTO content (collection, id, data, sort_order, published)
+       VALUES (@collection, @id, @data, @sort_order, @published)`,
+      args,
+    ),
+  update: (args: { collection: string; id: string; data: string; published: number; sort_order: number }) =>
+    run(
+      `UPDATE content SET data = @data, published = @published, sort_order = @sort_order, updated_at = datetime('now')
+       WHERE collection = @collection AND id = @id`,
+      args,
+    ),
+  rename: (newId: string, collection: string, currentId: string) =>
+    run("UPDATE content SET id = ? WHERE collection = ? AND id = ?", [newId, collection, currentId]),
+  remove: (collection: string, id: string) => run("DELETE FROM content WHERE collection = ? AND id = ?", [collection, id]),
+  clear: (collection: string) => run("DELETE FROM content WHERE collection = ?", [collection]),
+  setSort: (sortOrder: number, collection: string, id: string) =>
+    run("UPDATE content SET sort_order = ?, updated_at = datetime('now') WHERE collection = ? AND id = ?", [
+      sortOrder,
+      collection,
+      id,
+    ]),
+  counts: () =>
+    all<{ collection: string; published: number; total: number }>(
+      `SELECT collection, sum(published) AS published, count(*) AS total FROM content GROUP BY collection`,
+    ),
+  lastUpdate: () =>
+    get<{ t: string | null }>(`
+      SELECT max(t) AS t FROM (
+        SELECT max(updated_at) AS t FROM content
+        UNION ALL SELECT max(updated_at) FROM settings
+      )
+    `),
 };
 
 export function isCollection(name: string): name is CollectionName {
@@ -349,67 +393,130 @@ export function parseRow(row: ContentRow) {
 }
 
 /** Replace a collection with its shipped defaults. */
-export function seedCollection(name: CollectionName) {
+export async function seedCollection(name: CollectionName): Promise<void> {
   const items = defaultContent.collections[name] as unknown as { id: string }[];
-  db.transaction(() => {
-    contentQ.clear.run(name);
-    items.forEach((item, index) => {
-      contentQ.insert.run({
+  const statements: Array<[string, Args?]> = [["DELETE FROM content WHERE collection = ?", [name]]];
+  items.forEach((item, index) => {
+    statements.push([
+      `INSERT INTO content (collection, id, data, sort_order, published)
+       VALUES (@collection, @id, @data, @sort_order, @published)`,
+      {
         collection: name,
         id: item.id,
         data: JSON.stringify(item),
         sort_order: (index + 1) * 10,
         published: 1,
-      });
-    });
-  })();
+      },
+    ]);
+  });
+  await tx(statements);
 }
 
 /* ------------------------------------------------------------------ */
-/* First-run seeding                                                  */
-/* Each collection is auto-seeded at most once, so deleting every     */
-/* entry in a section from the admin doesn't bring defaults back.     */
+/* Initialisation — schema, migrations, first-run seeding             */
+/* Must be awaited before the API serves requests or a CLI uses db.   */
 /* ------------------------------------------------------------------ */
-const countCollection = db.prepare("SELECT count(*) AS c FROM content WHERE collection = ?");
-const seededRow = getSettingStmt.get("seeded_collections") as { value: string } | undefined;
-const seeded = new Set<string>(seededRow ? (JSON.parse(seededRow.value) as string[]) : []);
-for (const name of COLLECTION_NAMES) {
-  if (seeded.has(name)) continue;
-  const { c } = countCollection.get(name) as { c: number };
-  if (c === 0) seedCollection(name);
-  seeded.add(name);
-}
-putSettingStmt.run("seeded_collections", JSON.stringify([...seeded]));
-if (!readSetting("site")) writeSetting("site", defaultContent.settings);
-if (!readSetting("advanced")) writeSetting("advanced", defaultContent.advanced);
+let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
-const adminCount = (db.prepare("SELECT count(*) AS c FROM admin_users").get() as { c: number }).c;
-if (adminCount === 0) {
-  // `||` (not `??`) so blank lines copied from .env.example fall back correctly.
-  const email = (process.env.ADMIN_EMAIL || "admin@novaframe.studio").toLowerCase().trim();
-  const fromEnv = process.env.ADMIN_PASSWORD ?? "";
-  if (fromEnv && fromEnv.length < 10) {
-    console.warn("[admin] ADMIN_PASSWORD is shorter than 10 characters - a strong password was generated instead.");
+export async function initDb(): Promise<void> {
+  // libSQL/Turso manage journal + synchronous modes themselves; only the
+  // local file backend benefits from (and supports) a foreign-keys pragma.
+  if (!usingTurso) {
+    await db.execute("PRAGMA foreign_keys = ON");
   }
-  const generated = fromEnv.length < 10;
-  const password = generated ? crypto.randomBytes(9).toString("base64url") : fromEnv;
-  const { hash, salt } = hashPassword(password);
-  db.prepare("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, 'owner')").run(
-    email,
-    hash,
-    salt,
-    process.env.ADMIN_NAME || "Afzal Hussain",
+
+  await exec(SCHEMA_SQL);
+
+  // Column migrations for databases created by earlier versions.
+  await addColumn("admin_users", "active INTEGER NOT NULL DEFAULT 1");
+  await addColumn("audit_logs", "admin_email TEXT");
+  for (const ddl of [
+    "priority TEXT NOT NULL DEFAULT 'normal'",
+    "value_estimate INTEGER",
+    "internal_notes TEXT",
+    "source TEXT NOT NULL DEFAULT 'website'",
+  ]) {
+    await addColumn("enquiries", ddl);
+  }
+  await addColumn("payments", "method TEXT");
+  await addColumn("payments", "paid_at TEXT");
+
+  // Older schema restricted statuses without 'lost' — rebuild the table once if needed.
+  const enquiriesSql =
+    (await get<{ sql?: string }>("SELECT sql FROM sqlite_master WHERE type='table' AND name='enquiries'"))?.sql ?? "";
+  if (enquiriesSql && !enquiriesSql.includes("'lost'")) {
+    await exec(`
+      ${ENQUIRIES_TABLE("enquiries_v2")}
+      INSERT INTO enquiries_v2 (id, reference, name, company_name, email, phone, service, budget_range, timeline,
+        project_details, status, priority, value_estimate, internal_notes, source, ip_address, user_agent, created_at, updated_at)
+      SELECT id, reference, name, company_name, email, phone, service, budget_range, timeline,
+        project_details, status, coalesce(priority,'normal'), value_estimate, internal_notes, coalesce(source,'website'),
+        ip_address, user_agent, created_at, updated_at
+      FROM enquiries;
+      DROP TABLE enquiries;
+      ALTER TABLE enquiries_v2 RENAME TO enquiries;
+    `);
+  }
+
+  await exec(INDEX_SQL);
+  await run("PRAGMA user_version = 2");
+
+  /* ---- First-run seeding (each collection auto-seeded at most once) ---- */
+  const seededRow = await get<{ value: string }>("SELECT value, updated_at FROM settings WHERE key = ?", [
+    "seeded_collections",
+  ]);
+  const seeded = new Set<string>(seededRow ? (JSON.parse(seededRow.value) as string[]) : []);
+  for (const name of COLLECTION_NAMES) {
+    if (seeded.has(name)) continue;
+    const { c } = (await get<{ c: number }>("SELECT count(*) AS c FROM content WHERE collection = ?", [name])) ?? { c: 0 };
+    if (c === 0) await seedCollection(name);
+    seeded.add(name);
+  }
+  await run(
+    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    ["seeded_collections", JSON.stringify([...seeded])],
   );
-  const line = "-".repeat(58);
-  console.log(`\n+${line}+`);
-  console.log(`|  Owner account created for the admin console${" ".repeat(13)}|`);
-  console.log(`|  Email:    ${email.padEnd(46)}|`);
-  console.log(`|  Password: ${(generated ? password : "(from ADMIN_PASSWORD)").padEnd(46)}|`);
-  console.log(`|  ${generated ? "Save it now - change it in Admin > Security.".padEnd(56) : " ".repeat(56)}|`);
-  console.log(`+${line}+\n`);
+  if (!(await readSetting("site"))) await writeSetting("site", defaultContent.settings);
+  if (!(await readSetting("advanced"))) await writeSetting("advanced", defaultContent.advanced);
+
+  /* ---- Owner-account bootstrap ---- */
+  const adminCount = (await get<{ c: number }>("SELECT count(*) AS c FROM admin_users"))?.c ?? 0;
+  if (adminCount === 0) {
+    // `||` (not `??`) so blank lines copied from .env.example fall back correctly.
+    const email = (process.env.ADMIN_EMAIL || "admin@novaframe.studio").toLowerCase().trim();
+    const fromEnv = process.env.ADMIN_PASSWORD ?? "";
+    if (fromEnv && fromEnv.length < 10) {
+      console.warn("[admin] ADMIN_PASSWORD is shorter than 10 characters - a strong password was generated instead.");
+    }
+    const generated = fromEnv.length < 10;
+    const password = generated ? crypto.randomBytes(9).toString("base64url") : fromEnv;
+    const { hash, salt } = hashPassword(password);
+    await run("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, 'owner')", [
+      email,
+      hash,
+      salt,
+      process.env.ADMIN_NAME || "Afzal Hussain",
+    ]);
+    const line = "-".repeat(58);
+    console.log(`\n+${line}+`);
+    console.log(`|  Owner account created for the admin console${" ".repeat(13)}|`);
+    console.log(`|  Email:    ${email.padEnd(46)}|`);
+    console.log(`|  Password: ${(generated ? password : "(from ADMIN_PASSWORD)").padEnd(46)}|`);
+    console.log(`|  ${generated ? "Save it now - change it in Admin > Security.".padEnd(56) : " ".repeat(56)}|`);
+    console.log(`+${line}+\n`);
+  }
+
+  /* ---- Housekeeping: drop expired sessions on boot and hourly. ---- */
+  await purgeSessions();
+  if (!purgeTimer) {
+    purgeTimer = setInterval(() => {
+      purgeSessions().catch((err) => console.error("[sessions] purge failed:", (err as Error).message));
+    }, 60 * 60 * 1000);
+    purgeTimer.unref();
+  }
 }
 
-/* Housekeeping: drop expired sessions on boot and hourly. */
-const purgeSessions = db.prepare("DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now')");
-purgeSessions.run();
-setInterval(() => purgeSessions.run(), 60 * 60 * 1000).unref();
+async function purgeSessions(): Promise<void> {
+  await run("DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now')");
+}

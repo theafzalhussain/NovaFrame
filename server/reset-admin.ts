@@ -7,7 +7,7 @@
  * its password, re-activates it and signs out all of its sessions.
  */
 import "./env.js";
-import { db, hashPassword } from "./db.js";
+import { get, run, hashPassword, initDb } from "./db.js";
 
 function arg(name: string) {
   const i = process.argv.indexOf(`--${name}`);
@@ -22,20 +22,22 @@ if (!email || password.length < 10) {
   process.exit(1);
 }
 
+await initDb();
+
 const { hash, salt } = hashPassword(password);
-const existing = db.prepare("SELECT id FROM admin_users WHERE email = ?").get(email) as { id: number } | undefined;
+const existing = await get<{ id: number }>("SELECT id FROM admin_users WHERE email = ?", [email]);
 
 if (existing) {
-  db.prepare("UPDATE admin_users SET password_hash = ?, salt = ?, active = 1 WHERE id = ?").run(hash, salt, existing.id);
-  db.prepare("DELETE FROM sessions WHERE user_id = ?").run(existing.id);
+  await run("UPDATE admin_users SET password_hash = ?, salt = ?, active = 1 WHERE id = ?", [hash, salt, existing.id]);
+  await run("DELETE FROM sessions WHERE user_id = ?", [existing.id]);
   console.log(`✔ Password reset for ${email}. All of its sessions were signed out.`);
 } else {
-  db.prepare("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, 'owner')").run(
+  await run("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, 'owner')", [
     email,
     hash,
     salt,
     arg("name") ?? "Studio Owner",
-  );
+  ]);
   console.log(`✔ Owner account created for ${email}.`);
 }
 process.exit(0);

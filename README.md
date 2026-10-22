@@ -5,7 +5,7 @@ It uses a dark "Noir & Champagne" design: gold `#d4ad66` on warm obsidian, set i
 Every section of the site is served from a database and is editable in a role-based admin console.
 
 - **Frontend:** React 19, TypeScript, Vite 7, Tailwind CSS v4, Three.js (armillary hero scene, loaded on demand)
-- **API (default):** Node.js + Express 5 + SQLite (`better-sqlite3`), optional SMTP email via Nodemailer
+- **API (default):** Node.js + Express 5 + SQLite/libSQL (`@libsql/client` — a local file in development, a hosted [Turso](https://turso.tech) database in production), optional email via Nodemailer or the Brevo/Resend HTTP APIs
 - **API (shared hosting):** PHP 8 + MySQL. It exposes the same contract, so the site and console work unchanged.
 
 ---
@@ -53,6 +53,7 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 | `npm start` | Build, then serve site **and** API from one Node process on `PORT` |
 | `npm run typecheck` | Strict TypeScript check for the web app and the server |
 | `npm run admin:reset -- --email … --password …` | Create an owner, or reset a password and sign out its sessions |
+| `npm run turso:push` | One-time copy of the local SQLite file into the Turso database (`-- --from=path.db` for another file) |
 | `npm run mail:test` | Log in to SMTP and send one sample of every email template to `NOTIFY_EMAIL` |
 | `npm run seed:php` | Regenerate `server/php/seed.json` from `src/data/defaults.ts` |
 
@@ -101,7 +102,9 @@ Copy `.env.example` → `.env` (git-ignored; `server/.env` also works). Every va
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `4000` | API port |
-| `DB_PATH` | `server/novaframe.db` | SQLite file. Put it on persistent storage in production |
+| `TURSO_DATABASE_URL` | — | Hosted libSQL database (`libsql://….turso.io`). Set in production; leave empty to use a local file |
+| `TURSO_AUTH_TOKEN` | — | Token for the Turso database |
+| `DB_PATH` | `server/novaframe.db` | Local SQLite file, used only when `TURSO_DATABASE_URL` is empty |
 | `CORS_ORIGIN` | *(any origin)* | Comma-separated list of sites allowed to call the API |
 | `TRUST_PROXY` | private ranges | Set `1` behind one reverse proxy so rate limits and logs see real IPs |
 | `SESSION_DAYS` | `7` | Admin session lifetime |
@@ -138,14 +141,26 @@ The database is seeded only once per section, so a section you empty in the cons
 
 ## Deployment
 
-**A. One Node server** (VPS, Render, Railway, …)
+**A. One Node server + Turso** (Render free plan, Railway, VPS …)
 
 ```bash
 npm ci            # dev dependencies are needed: the build uses Vite and the server runs through tsx
 npm start         # builds, then serves the site + /api on $PORT
 ```
 
-Set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CORS_ORIGIN`, `TRUST_PROXY=1` and a `DB_PATH` on a persistent disk.
+Create a free database at [turso.tech](https://turso.tech), then set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`
+along with `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CORS_ORIGIN` and `TRUST_PROXY=1`.
+Because the data lives in Turso, no persistent disk is required and the database survives restarts,
+redeploys and free-tier sleep. `render.yaml` deploys exactly this as a Render Blueprint.
+
+To carry your local data over to Turso once:
+
+```bash
+npm run turso:push          # copies server/novaframe.db → the Turso database
+```
+
+Without `TURSO_DATABASE_URL`, the server falls back to a local SQLite file (`DB_PATH`), which is what
+`npm run server` uses in development.
 
 **B. Static site + separate API.** Build with `VITE_API_URL=https://api.your-domain.com/api npm run build` and upload `dist/` to any static host.
 Run the API anywhere, with `CORS_ORIGIN=https://your-domain.com`.

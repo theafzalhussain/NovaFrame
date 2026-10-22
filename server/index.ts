@@ -30,17 +30,23 @@ import { mailEnabled, mailBackend, notifyBooking, notifyLead, notifyPayment, ver
 import Razorpay from "razorpay";
 import {
   TZ_MOD,
+  all,
   contentQ,
-  db,
+  get,
   hashPassword,
   hashToken,
+  initDb,
   isCollection,
   newReference,
   parseRow,
   readSetting,
+  run,
   seedCollection,
+  tx,
+  usingTurso,
   verifyPassword,
   writeSetting,
+  type Args,
   type ContentRow,
 } from "./db.js";
 
@@ -102,16 +108,16 @@ function deepMerge<T>(base: T, override: unknown): T {
   return out as T;
 }
 
-const siteSettings = () => deepMerge(defaultContent.settings, readSetting<SiteSettings>("site"));
-const advancedSettings = () => deepMerge(defaultContent.advanced, readSetting<AdvancedSettings>("advanced"));
+const siteSettings = async () => deepMerge(defaultContent.settings, await readSetting<SiteSettings>("site"));
+const advancedSettings = async () => deepMerge(defaultContent.advanced, await readSetting<AdvancedSettings>("advanced"));
 
 /** Public site URL for links inside emails (optional, e.g. https://novaframe.studio). */
 const SITE_URL = /^https?:\/\//i.test(process.env.SITE_URL ?? "") ? (process.env.SITE_URL as string).replace(/\/+$/, "") : undefined;
 
 /** Branding + signature used by every outgoing email. */
-function mailContext(): MailContext {
-  const founder = (contentQ.listPublished.all("team") as ContentRow[]).map((row) => parseRow(row).data as { name?: string; role?: string })[0];
-  return { settings: siteSettings(), founder: founder?.name ? { name: founder.name, role: founder.role } : undefined, siteUrl: SITE_URL };
+async function mailContext(): Promise<MailContext> {
+  const founder = (await contentQ.listPublished("team")).map((row) => parseRow(row).data as { name?: string; role?: string })[0];
+  return { settings: await siteSettings(), founder: founder?.name ? { name: founder.name, role: founder.role } : undefined, siteUrl: SITE_URL };
 }
 
 /** yyyy-mm-dd for "now + offsetDays" in an IANA timezone */
@@ -120,8 +126,8 @@ function dateInTz(timeZone: string, offsetDays = 0) {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
-function estimateValue(budgetLabel: string): number | null {
-  const range = advancedSettings().budgetRanges.find((b) => b.label === budgetLabel);
+async function estimateValue(budgetLabel: string): Promise<number | null> {
+  const range = (await advancedSettings()).budgetRanges.find((b) => b.label === budgetLabel);
   if (!range) return null;
   if (range.max === null) return Math.round(range.min * 1.25);
   return Math.round((range.min + range.max) / 2);
@@ -176,25 +182,40 @@ const loginLimiter = rateLimit({
 const ROLE_RANK: Record<AdminRole, number> = { editor: 1, admin: 2, owner: 3 };
 
 const sessionQ = {
-  create: db.prepare("INSERT INTO sessions (token_hash, user_id, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)"),
-  find: db.prepare(`
-    SELECT s.id AS session_id, s.last_seen_at, u.id, u.email, u.full_name, u.role, u.active
-    FROM sessions s JOIN admin_users u ON u.id = s.user_id
-    WHERE s.token_hash = ? AND datetime(s.expires_at) > datetime('now')
-  `),
-  touch: db.prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE id = ?"),
-  remove: db.prepare("DELETE FROM sessions WHERE id = ?"),
-  removeForUser: db.prepare("DELETE FROM sessions WHERE user_id = ? AND id != ?"),
-  listForUser: db.prepare(
-    "SELECT id, ip_address, user_agent, created_at, last_seen_at, expires_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC",
-  ),
+  create: (tokenHash: string, userId: number, ip: string, ua: string, expiresAt: string) =>
+    run("INSERT INTO sessions (token_hash, user_id, ip_address, user_agent, expires_at) VALUES (?, ?, ?, ?, ?)", [
+      tokenHash,
+      userId,
+      ip,
+      ua,
+      expiresAt,
+    ]),
+  find: (tokenHash: string) =>
+    get<{ session_id: number; last_seen_at: string; id: number; email: string; full_name: string; role: AdminRole; active: number }>(
+      `SELECT s.id AS session_id, s.last_seen_at, u.id, u.email, u.full_name, u.role, u.active
+       FROM sessions s JOIN admin_users u ON u.id = s.user_id
+       WHERE s.token_hash = ? AND datetime(s.expires_at) > datetime('now')`,
+      [tokenHash],
+    ),
+  touch: (id: number) => run("UPDATE sessions SET last_seen_at = datetime('now') WHERE id = ?", [id]),
+  remove: (id: number) => run("DELETE FROM sessions WHERE id = ?", [id]),
+  removeForUser: (userId: number, keepId: number) => run("DELETE FROM sessions WHERE user_id = ? AND id != ?", [userId, keepId]),
+  listForUser: (userId: number) =>
+    all<{ id: number; ip_address: string; user_agent: string; created_at: string; last_seen_at: string; expires_at: string }>(
+      "SELECT id, ip_address, user_agent, created_at, last_seen_at, expires_at FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC",
+      [userId],
+    ),
 };
 
-const auditStmt = db.prepare(
-  "INSERT INTO audit_logs (admin_id, admin_email, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)",
-);
-function audit(req: AuthedRequest, action: string, target: string, details = "") {
-  auditStmt.run(req.admin?.id ?? null, req.admin?.email ?? null, action, target.slice(0, 120), details.slice(0, 500), ipOf(req));
+async function audit(req: AuthedRequest, action: string, target: string, details = "") {
+  await run("INSERT INTO audit_logs (admin_id, admin_email, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)", [
+    req.admin?.id ?? null,
+    req.admin?.email ?? null,
+    action,
+    target.slice(0, 120),
+    details.slice(0, 500),
+    ipOf(req),
+  ]);
 }
 
 function bearer(req: Request) {
@@ -205,17 +226,19 @@ function bearer(req: Request) {
 }
 
 function requireRole(minRole: AdminRole = "editor") {
-  return (req: AuthedRequest, res: Response, next: NextFunction) => {
-    const token = bearer(req);
-    if (!token) return fail(res, 401, "Authentication required.");
-    const row = sessionQ.find.get(hashToken(token)) as
-      | { session_id: number; last_seen_at: string; id: number; email: string; full_name: string; role: AdminRole; active: number }
-      | undefined;
-    if (!row || row.active !== 1) return fail(res, 401, "Your session has expired. Please sign in again.");
-    if ((ROLE_RANK[row.role] ?? 0) < ROLE_RANK[minRole]) return fail(res, 403, "Your role doesn't allow this action.");
-    req.admin = { id: row.id, email: row.email, fullName: row.full_name, role: row.role, sessionId: row.session_id };
-    if (Date.now() - Date.parse(row.last_seen_at + "Z") > 5 * 60 * 1000) sessionQ.touch.run(row.session_id);
-    next();
+  return async (req: AuthedRequest, res: Response, next: NextFunction) => {
+    try {
+      const token = bearer(req);
+      if (!token) return fail(res, 401, "Authentication required.");
+      const row = await sessionQ.find(hashToken(token));
+      if (!row || row.active !== 1) return fail(res, 401, "Your session has expired. Please sign in again.");
+      if ((ROLE_RANK[row.role] ?? 0) < ROLE_RANK[minRole]) return fail(res, 403, "Your role doesn't allow this action.");
+      req.admin = { id: row.id, email: row.email, fullName: row.full_name, role: row.role, sessionId: row.session_id };
+      if (Date.now() - Date.parse(row.last_seen_at + "Z") > 5 * 60 * 1000) await sessionQ.touch(row.session_id);
+      next();
+    } catch (err) {
+      next(err);
+    }
   };
 }
 
@@ -226,36 +249,39 @@ const ownerOnly = requireRole("owner");
 /* ------------------------------------------------------------------ */
 /* Public API                                                         */
 /* ------------------------------------------------------------------ */
-app.get("/api/health", (_req, res) => {
-  const { c } = db.prepare("SELECT count(*) AS c FROM content").get() as { c: number };
-  ok(res, { service: "novaframe-api", database: "sqlite", contentItems: c, time: new Date().toISOString() });
+app.get("/api/health", async (_req, res) => {
+  const { c } = (await get<{ c: number }>("SELECT count(*) AS c FROM content")) ?? { c: 0 };
+  ok(res, { service: "novaframe-api", database: usingTurso ? "turso" : "sqlite", contentItems: c, time: new Date().toISOString() });
 });
 
-function publishedCollection(name: CollectionName) {
-  return (contentQ.listPublished.all(name) as ContentRow[]).map((row) => parseRow(row).data);
+async function publishedCollection(name: CollectionName) {
+  return (await contentQ.listPublished(name)).map((row) => parseRow(row).data);
 }
 
-app.get("/api/content", (_req, res) => {
-  const collections = Object.fromEntries(COLLECTION_NAMES.map((name) => [name, publishedCollection(name)]));
-  const { t } = contentQ.lastUpdate.get() as { t: string | null };
+app.get("/api/content", async (_req, res) => {
+  const collections = Object.fromEntries(await Promise.all(COLLECTION_NAMES.map(async (name) => [name, await publishedCollection(name)])));
+  const { t } = (await contentQ.lastUpdate()) ?? { t: null };
   res.setHeader("Cache-Control", "no-cache");
-  ok(res, { settings: siteSettings(), advanced: advancedSettings(), collections, version: t ?? "" });
+  ok(res, { settings: await siteSettings(), advanced: await advancedSettings(), collections, version: t ?? "" });
 });
 
-app.get("/api/content/:collection", (req, res) => {
+app.get("/api/content/:collection", async (req, res) => {
   const name = req.params.collection;
   if (!isCollection(name)) return fail(res, 404, "Unknown collection.");
-  ok(res, publishedCollection(name));
+  ok(res, await publishedCollection(name));
 });
 
-const insertEnquiry = db.prepare(`
-  INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline,
-    project_details, source, value_estimate, ip_address, user_agent)
-  VALUES (@reference, @name, @company, @email, @phone, @service, @budget, @timeline,
-    @details, @source, @value, @ip, @ua)
-`);
+function insertEnquiry(args: Args) {
+  return run(
+    `INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline,
+      project_details, source, value_estimate, ip_address, user_agent)
+    VALUES (@reference, @name, @company, @email, @phone, @service, @budget, @timeline,
+      @details, @source, @value, @ip, @ua)`,
+    args,
+  );
+}
 
-app.post("/api/enquiries", formLimiter, (req, res) => {
+app.post("/api/enquiries", formLimiter, async (req, res) => {
   const b = req.body ?? {};
   // Honeypot — bots fill every field. Pretend success, store nothing.
   if (str(b.website, 200)) return ok(res, { reference: newReference("NF"), message: "Received" }, 201);
@@ -283,36 +309,29 @@ app.post("/api/enquiries", formLimiter, (req, res) => {
     details,
     source: (str(b.source, 30).replace(/[^a-z_-]/gi, "") || "contact").toLowerCase(),
   };
-  insertEnquiry.run({ ...lead, value: estimateValue(budget), ip: ipOf(req), ua: uaOf(req) });
-  notifyLead(lead, mailContext()).catch((err) => console.error("[mail] lead notification failed:", (err as Error).message));
+  await insertEnquiry({ ...lead, value: await estimateValue(budget), ip: ipOf(req), ua: uaOf(req) });
+  notifyLead(lead, await mailContext()).catch((err) => console.error("[mail] lead notification failed:", (err as Error).message));
   ok(res, { reference, message: "Enquiry received. We reply within 12 business hours.", mail: mailEnabled() }, 201);
 });
 
-app.get("/api/bookings/availability", (req, res) => {
-  const settings = siteSettings();
+app.get("/api/bookings/availability", async (req, res) => {
+  const settings = await siteSettings();
   const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from)) ? String(req.query.from) : dateInTz(settings.timezone);
   const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to)) ? String(req.query.to) : dateInTz(settings.timezone, 45);
-  const rows = db
-    .prepare(
-      "SELECT slot_date, slot_time FROM bookings WHERE slot_date BETWEEN ? AND ? AND status IN ('scheduled','confirmed')",
-    )
-    .all(from, to) as { slot_date: string; slot_time: string }[];
+  const rows = await all<{ slot_date: string; slot_time: string }>(
+    "SELECT slot_date, slot_time FROM bookings WHERE slot_date BETWEEN ? AND ? AND status IN ('scheduled','confirmed')",
+    [from, to],
+  );
   const taken: Record<string, string[]> = {};
   for (const r of rows) (taken[r.slot_date] ??= []).push(r.slot_time);
   ok(res, { taken, slots: settings.booking.slots, timezone: settings.timezone });
 });
 
-const insertBooking = db.prepare(`
-  INSERT INTO bookings (reference, name, email, phone, company_name, topic, budget_range, notes, slot_date, slot_time,
-    timezone, enquiry_id, ip_address, user_agent)
-  VALUES (@reference, @name, @email, @phone, @company, @topic, @budget, @notes, @date, @time, @tz, @enquiryId, @ip, @ua)
-`);
-
-app.post("/api/bookings", formLimiter, (req, res) => {
+app.post("/api/bookings", formLimiter, async (req, res) => {
   const b = req.body ?? {};
   if (str(b.website, 200)) return ok(res, { reference: newReference("NFC") }, 201);
 
-  const settings = siteSettings();
+  const settings = await siteSettings();
   const name = str(b.name, 120);
   const email = str(b.email, 160).toLowerCase();
   const date = str(b.date, 10);
@@ -337,48 +356,63 @@ app.post("/api/bookings", formLimiter, (req, res) => {
   const company = str(b.companyName, 160);
   const phone = str(b.phone, 40);
   const reference = newReference("NFC");
+  const enquiryReference = newReference("NF");
 
   try {
-    db.transaction(() => {
-      const enquiry = insertEnquiry.run({
-        reference: newReference("NF"),
-        name,
-        company,
-        email,
-        phone,
-        service: `Discovery call — ${topic}`,
-        budget: budget || "To discuss on call",
-        timeline: `Call booked for ${date} · ${time} ${settings.timezoneLabel}`,
-        details: notes || `Discovery call requested about: ${topic}.`,
-        source: "booking",
-        value: estimateValue(budget),
-        ip: ipOf(req),
-        ua: uaOf(req),
-      });
-      insertBooking.run({
-        reference,
-        name,
-        email,
-        phone,
-        company,
-        topic,
-        budget,
-        notes,
-        date,
-        time,
-        tz: settings.timezone,
-        enquiryId: Number(enquiry.lastInsertRowid),
-        ip: ipOf(req),
-        ua: uaOf(req),
-      });
-    })();
+    // Atomic: create the lead then the booking. The UNIQUE active-slot index
+    // rejects a double-booking, which rolls the whole batch back → 409 below.
+    await tx([
+      [
+        `INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline,
+          project_details, source, value_estimate, ip_address, user_agent)
+        VALUES (@reference, @name, @company, @email, @phone, @service, @budget, @timeline,
+          @details, @source, @value, @ip, @ua)`,
+        {
+          reference: enquiryReference,
+          name,
+          company,
+          email,
+          phone,
+          service: `Discovery call — ${topic}`,
+          budget: budget || "To discuss on call",
+          timeline: `Call booked for ${date} · ${time} ${settings.timezoneLabel}`,
+          details: notes || `Discovery call requested about: ${topic}.`,
+          source: "booking",
+          value: await estimateValue(budget),
+          ip: ipOf(req),
+          ua: uaOf(req),
+        },
+      ],
+      [
+        `INSERT INTO bookings (reference, name, email, phone, company_name, topic, budget_range, notes, slot_date, slot_time,
+          timezone, enquiry_id, ip_address, user_agent)
+        VALUES (@reference, @name, @email, @phone, @company, @topic, @budget, @notes, @date, @time, @tz,
+          (SELECT id FROM enquiries WHERE reference = @enquiryRef), @ip, @ua)`,
+        {
+          reference,
+          name,
+          email,
+          phone,
+          company,
+          topic,
+          budget,
+          notes,
+          date,
+          time,
+          tz: settings.timezone,
+          enquiryRef: enquiryReference,
+          ip: ipOf(req),
+          ua: uaOf(req),
+        },
+      ],
+    ]);
   } catch (err) {
     if (String((err as Error).message).includes("UNIQUE")) {
       return fail(res, 409, "That slot was just taken — please pick another time.", { errors: { time: "Slot taken" } });
     }
     throw err;
   }
-  notifyBooking({ reference, name, email, phone, company, topic, budget, date, time, notes }, mailContext()).catch((err) =>
+  notifyBooking({ reference, name, email, phone, company, topic, budget, date, time, notes }, await mailContext()).catch((err) =>
     console.error("[mail] booking notification failed:", (err as Error).message),
   );
   ok(
@@ -388,27 +422,28 @@ app.post("/api/bookings", formLimiter, (req, res) => {
   );
 });
 
-app.post("/api/subscribe", subscribeLimiter, (req, res) => {
+app.post("/api/subscribe", subscribeLimiter, async (req, res) => {
   const email = str(req.body?.email, 160).toLowerCase();
   if (!isEmail(email)) return fail(res, 422, "Please enter a valid email address.");
-  const info = db
-    .prepare("INSERT OR IGNORE INTO subscribers (email, source) VALUES (?, ?)")
-    .run(email, str(req.body?.source, 40) || "footer");
+  const info = await run("INSERT OR IGNORE INTO subscribers (email, source) VALUES (?, ?)", [
+    email,
+    str(req.body?.source, 40) || "footer",
+  ]);
   ok(res, { subscribed: true, existing: info.changes === 0 });
 });
 
-app.post("/api/events", eventLimiter, (req, res) => {
+app.post("/api/events", eventLimiter, async (req, res) => {
   const name = str(req.body?.name, 40).replace(/[^a-z0-9_:-]/gi, "");
   if (!name) return fail(res, 422, "Event name required.");
   let meta = "";
   if (isPlainObject(req.body?.meta)) meta = JSON.stringify(req.body.meta).slice(0, 1000);
-  db.prepare("INSERT INTO events (name, path, session_id, referrer, meta) VALUES (?, ?, ?, ?, ?)").run(
+  await run("INSERT INTO events (name, path, session_id, referrer, meta) VALUES (?, ?, ?, ?, ?)", [
     name,
     str(req.body?.path, 200),
     str(req.body?.sid, 64),
     str(req.body?.referrer, 300),
     meta || null,
-  );
+  ]);
   ok(res, null, 202);
 });
 
@@ -447,20 +482,30 @@ type PaymentRow = {
 };
 
 const paymentQ = {
-  insert: db.prepare(`
-    INSERT INTO payments (reference, razorpay_order_id, name, email, phone, company_name, purpose, amount, currency, enquiry_id, ip_address, user_agent)
-    VALUES (@reference, @orderId, @name, @email, @phone, @company, @purpose, @amount, @currency, @enquiryId, @ip, @ua)
-  `),
-  byOrder: db.prepare("SELECT * FROM payments WHERE razorpay_order_id = ?"),
+  insert: (args: Args) =>
+    run(
+      `INSERT INTO payments (reference, razorpay_order_id, name, email, phone, company_name, purpose, amount, currency, enquiry_id, ip_address, user_agent)
+       VALUES (@reference, @orderId, @name, @email, @phone, @company, @purpose, @amount, @currency, @enquiryId, @ip, @ua)`,
+      args,
+    ),
+  byOrder: (orderId: string) => get<PaymentRow>("SELECT * FROM payments WHERE razorpay_order_id = ?", [orderId]),
   // Only the first successful confirmation flips the row — that caller sends the emails.
-  markPaid: db.prepare(`
-    UPDATE payments SET status = 'paid', razorpay_payment_id = @paymentId, method = coalesce(@method, method),
-      paid_at = datetime('now'), updated_at = datetime('now')
-    WHERE razorpay_order_id = @orderId AND status != 'paid'
-  `),
-  setMethod: db.prepare("UPDATE payments SET method = ?, updated_at = datetime('now') WHERE razorpay_order_id = ? AND method IS NULL"),
-  leadPaid: db.prepare("UPDATE enquiries SET project_details = ?, updated_at = datetime('now') WHERE id = ?"),
-  leadNote: db.prepare("INSERT INTO enquiry_notes (enquiry_id, admin_name, kind, body) VALUES (?, 'Razorpay', 'payment', ?)"),
+  markPaid: (args: { paymentId: string; method: string | null; orderId: string }) =>
+    run(
+      `UPDATE payments SET status = 'paid', razorpay_payment_id = @paymentId, method = coalesce(@method, method),
+        paid_at = datetime('now'), updated_at = datetime('now')
+      WHERE razorpay_order_id = @orderId AND status != 'paid'`,
+      args,
+    ),
+  setMethod: (method: string, orderId: string) =>
+    run("UPDATE payments SET method = ?, updated_at = datetime('now') WHERE razorpay_order_id = ? AND method IS NULL", [
+      method,
+      orderId,
+    ]),
+  leadPaid: (details: string, id: number) =>
+    run("UPDATE enquiries SET project_details = ?, updated_at = datetime('now') WHERE id = ?", [details, id]),
+  leadNote: (id: number, body: string) =>
+    run("INSERT INTO enquiry_notes (enquiry_id, admin_name, kind, body) VALUES (?, 'Razorpay', 'payment', ?)", [id, body]),
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -517,21 +562,21 @@ const isoUtc = (sqlite: string | null) => (sqlite ? `${sqlite.replace(" ", "T")}
 
 /** Marks an order paid (idempotent). The first caller logs it on the lead and sends the emails. */
 async function settlePayment(orderId: string, paymentId: string): Promise<PaymentRow | null> {
-  const row = paymentQ.byOrder.get(orderId) as PaymentRow | undefined;
+  const row = await paymentQ.byOrder(orderId);
   if (!row) return null;
   const method = row.status === "paid" && row.method ? row.method : await inspectPayment(paymentId, row);
-  const first = paymentQ.markPaid.run({ orderId, paymentId, method }).changes === 1;
-  if (!first && method) paymentQ.setMethod.run(method, orderId);
-  const fresh = paymentQ.byOrder.get(orderId) as PaymentRow;
+  const first = (await paymentQ.markPaid({ orderId, paymentId, method })).changes === 1;
+  if (!first && method) await paymentQ.setMethod(method, orderId);
+  const fresh = (await paymentQ.byOrder(orderId)) as PaymentRow;
 
   if (first) {
     const amountLabel = `${fresh.currency} ${fresh.amount.toLocaleString("en-IN")}`;
     if (fresh.enquiry_id) {
-      paymentQ.leadPaid.run(
+      await paymentQ.leadPaid(
         `Online payment received: ${amountLabel} for "${fresh.purpose}"${method ? ` via ${method}` : ""}. Receipt ${fresh.reference} · Razorpay ${paymentId}.`,
         fresh.enquiry_id,
       );
-      paymentQ.leadNote.run(fresh.enquiry_id, `Payment received — ${amountLabel}${method ? ` via ${method}` : ""} · ${paymentId}${paymentsTestMode() ? " (test mode)" : ""}`);
+      await paymentQ.leadNote(fresh.enquiry_id, `Payment received — ${amountLabel}${method ? ` via ${method}` : ""} · ${paymentId}${paymentsTestMode() ? " (test mode)" : ""}`);
     }
     console.log(`[payment] ${fresh.reference} paid — ${amountLabel} (${paymentId})`);
     notifyPayment(
@@ -550,7 +595,7 @@ async function settlePayment(orderId: string, paymentId: string): Promise<Paymen
         paidAt: new Date(isoUtc(fresh.paid_at)),
         testMode: paymentsTestMode(),
       },
-      mailContext(),
+      await mailContext(),
     ).catch((err) => console.error("[mail] payment emails failed:", (err as Error).message));
   }
   return fresh;
@@ -612,7 +657,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
     });
 
     // Record a lead so every payer shows up in the admin CRM, then the payment row.
-    const enquiry = insertEnquiry.run({
+    const enquiry = await insertEnquiry({
       reference: newReference("NF"),
       name,
       company,
@@ -628,7 +673,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
       ua: uaOf(req),
     });
 
-    paymentQ.insert.run({
+    await paymentQ.insert({
       reference,
       orderId: order.id,
       name,
@@ -669,7 +714,7 @@ app.post("/api/payments/verify", paymentLimiter, async (req, res) => {
   const signature = str(req.body?.razorpay_signature, 200);
   if (!orderId || !paymentId || !signature) return fail(res, 400, "Missing payment details.");
 
-  if (!paymentQ.byOrder.get(orderId)) return fail(res, 404, "We couldn't find this order. Please contact us with your payment ID.");
+  if (!(await paymentQ.byOrder(orderId))) return fail(res, 404, "We couldn't find this order. Please contact us with your payment ID.");
 
   // HMAC-SHA256(order_id|payment_id) keyed with the secret proves Razorpay approved this payment.
   if (!sameHex(hmacHex(process.env.RAZORPAY_KEY_SECRET as string, `${orderId}|${paymentId}`), signature)) {
@@ -703,12 +748,19 @@ app.post("/api/payments/webhook", async (req: RawBodyRequest, res) => {
 });
 /* ------------------------------------------------------------------ */
 const userQ = {
-  byEmail: db.prepare("SELECT * FROM admin_users WHERE email = ?"),
-  byId: db.prepare("SELECT * FROM admin_users WHERE id = ?"),
-  list: db.prepare("SELECT id, email, full_name, role, active, last_login_at, created_at FROM admin_users ORDER BY id ASC"),
-  lastLogin: db.prepare("UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?"),
-  setPassword: db.prepare("UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?"),
-  owners: db.prepare("SELECT count(*) AS c FROM admin_users WHERE role = 'owner' AND active = 1"),
+  byEmail: (email: string) => get<{ id: number; email: string; full_name: string; role: AdminRole; password_hash: string; salt: string; active: number; last_login_at: string | null }>(
+    "SELECT * FROM admin_users WHERE email = ?",
+    [email],
+  ),
+  byId: <T>(id: number) => get<T>("SELECT * FROM admin_users WHERE id = ?", [id]),
+  list: () =>
+    all<{ id: number; email: string; full_name: string; role: string; active: number; last_login_at: string; created_at: string }>(
+      "SELECT id, email, full_name, role, active, last_login_at, created_at FROM admin_users ORDER BY id ASC",
+    ),
+  lastLogin: (id: number) => run("UPDATE admin_users SET last_login_at = datetime('now') WHERE id = ?", [id]),
+  setPassword: (hash: string, salt: string, id: number) =>
+    run("UPDATE admin_users SET password_hash = ?, salt = ? WHERE id = ?", [hash, salt, id]),
+  owners: () => get<{ c: number }>("SELECT count(*) AS c FROM admin_users WHERE role = 'owner' AND active = 1"),
 };
 const DUMMY = hashPassword("timing-safe-placeholder");
 
@@ -720,88 +772,93 @@ const publicUser = (u: { id: number; email: string; full_name: string; role: str
   lastLoginAt: u.last_login_at ?? null,
 });
 
-app.post("/api/admin/login", loginLimiter, (req: AuthedRequest, res) => {
+app.post("/api/admin/login", loginLimiter, async (req: AuthedRequest, res) => {
   const email = str(req.body?.email, 160).toLowerCase();
   const password = typeof req.body?.password === "string" ? req.body.password : "";
   if (!email || !password) return fail(res, 400, "Email and password are required.");
 
-  const user = userQ.byEmail.get(email) as
-    | { id: number; email: string; full_name: string; role: AdminRole; password_hash: string; salt: string; active: number; last_login_at: string | null }
-    | undefined;
+  const user = await userQ.byEmail(email);
   // Always run one PBKDF2 check so response timing doesn't reveal whether the email exists.
   const valid = user
     ? verifyPassword(password, user.password_hash, user.salt)
     : (verifyPassword(password, DUMMY.hash, DUMMY.salt), false);
   if (!user || !valid || user.active !== 1) {
-    auditStmt.run(user?.id ?? null, email, "LOGIN_FAILED", "AUTH", "Invalid credentials", ipOf(req));
+    await run("INSERT INTO audit_logs (admin_id, admin_email, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)", [
+      user?.id ?? null,
+      email,
+      "LOGIN_FAILED",
+      "AUTH",
+      "Invalid credentials",
+      ipOf(req),
+    ]);
     return fail(res, 401, "Invalid email or password.");
   }
 
   const token = crypto.randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000).toISOString().replace("T", " ").slice(0, 19);
-  sessionQ.create.run(hashToken(token), user.id, ipOf(req), uaOf(req), expiresAt);
-  userQ.lastLogin.run(user.id);
+  await sessionQ.create(hashToken(token), user.id, ipOf(req), uaOf(req), expiresAt);
+  await userQ.lastLogin(user.id);
   req.admin = { id: user.id, email: user.email, fullName: user.full_name, role: user.role, sessionId: 0 };
-  audit(req, "LOGIN", "AUTH", "Signed in");
+  await audit(req, "LOGIN", "AUTH", "Signed in");
   ok(res, { token, expiresAt, user: publicUser(user) });
 });
 
-app.get("/api/admin/me", anyAdmin, (req: AuthedRequest, res) => {
-  const user = userQ.byId.get(req.admin!.id) as Parameters<typeof publicUser>[0];
+app.get("/api/admin/me", anyAdmin, async (req: AuthedRequest, res) => {
+  const user = (await userQ.byId<Parameters<typeof publicUser>[0]>(req.admin!.id))!;
   ok(res, { user: publicUser(user) });
 });
 
-app.post("/api/admin/logout", anyAdmin, (req: AuthedRequest, res) => {
-  sessionQ.remove.run(req.admin!.sessionId);
-  audit(req, "LOGOUT", "AUTH", "Signed out");
+app.post("/api/admin/logout", anyAdmin, async (req: AuthedRequest, res) => {
+  await sessionQ.remove(req.admin!.sessionId);
+  await audit(req, "LOGOUT", "AUTH", "Signed out");
   ok(res);
 });
 
-app.post("/api/admin/password", anyAdmin, (req: AuthedRequest, res) => {
+app.post("/api/admin/password", anyAdmin, async (req: AuthedRequest, res) => {
   const current = typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
   const next = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
-  const user = userQ.byId.get(req.admin!.id) as { password_hash: string; salt: string };
+  const user = (await userQ.byId<{ password_hash: string; salt: string }>(req.admin!.id))!;
   if (!verifyPassword(current, user.password_hash, user.salt)) return fail(res, 400, "Your current password is incorrect.");
   if (next.length < 10) return fail(res, 422, "The new password must be at least 10 characters.");
   const { hash, salt } = hashPassword(next);
-  userQ.setPassword.run(hash, salt, req.admin!.id);
-  sessionQ.removeForUser.run(req.admin!.id, req.admin!.sessionId);
-  audit(req, "PASSWORD_CHANGED", `USER_${req.admin!.id}`, "Password changed; other sessions revoked");
+  await userQ.setPassword(hash, salt, req.admin!.id);
+  await sessionQ.removeForUser(req.admin!.id, req.admin!.sessionId);
+  await audit(req, "PASSWORD_CHANGED", `USER_${req.admin!.id}`, "Password changed; other sessions revoked");
   ok(res);
 });
 
-app.get("/api/admin/sessions", anyAdmin, (req: AuthedRequest, res) => {
-  const rows = sessionQ.listForUser.all(req.admin!.id) as { id: number }[];
+app.get("/api/admin/sessions", anyAdmin, async (req: AuthedRequest, res) => {
+  const rows = await sessionQ.listForUser(req.admin!.id);
   ok(res, rows.map((r) => ({ ...r, current: r.id === req.admin!.sessionId })));
 });
 
-app.delete("/api/admin/sessions/:id", anyAdmin, (req: AuthedRequest, res) => {
+app.delete("/api/admin/sessions/:id", anyAdmin, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const info = db.prepare("DELETE FROM sessions WHERE id = ? AND user_id = ?").run(id, req.admin!.id);
+  const info = await run("DELETE FROM sessions WHERE id = ? AND user_id = ?", [id, req.admin!.id]);
   if (!info.changes) return fail(res, 404, "Session not found.");
-  audit(req, "SESSION_REVOKED", `SESSION_${id}`);
+  await audit(req, "SESSION_REVOKED", `SESSION_${id}`);
   ok(res);
 });
 
 /* ------------------------------------------------------------------ */
 /* Admin — dashboard & analytics                                      */
 /* ------------------------------------------------------------------ */
-function dailySeries(sql: string, days: number, ...params: unknown[]) {
-  const rows = db.prepare(sql).all(...params) as { day: string; c: number }[];
+async function dailySeries(sql: string, days: number, ...params: unknown[]) {
+  const rows = await all<{ day: string; c: number }>(sql, params as Args);
   const map = new Map(rows.map((r) => [r.day, r.c]));
-  const tz = siteSettings().timezone;
+  const tz = (await siteSettings()).timezone;
   return Array.from({ length: days }, (_, i) => {
     const day = dateInTz(tz, i - days + 1);
     return { date: day, count: map.get(day) ?? 0 };
   });
 }
 
-app.get("/api/admin/overview", adminOnly, (_req, res) => {
-  const settings = siteSettings();
+app.get("/api/admin/overview", adminOnly, async (_req, res) => {
+  const settings = await siteSettings();
   const today = dateInTz(settings.timezone);
-  const one = <T>(sql: string, ...params: unknown[]) => db.prepare(sql).get(...params) as T;
+  const one = async <T>(sql: string, ...params: unknown[]) => (await get<T>(sql, params as Args))!;
 
-  const leads = one<{ total: number; fresh: number; won: number; lost: number; last7: number; prev7: number; pipeline: number | null; wonValue: number | null }>(`
+  const leads = await one<{ total: number; fresh: number; won: number; lost: number; last7: number; prev7: number; pipeline: number | null; wonValue: number | null }>(`
     SELECT count(*) AS total,
       sum(status = 'new') AS fresh,
       sum(status = 'won') AS won,
@@ -811,12 +868,12 @@ app.get("/api/admin/overview", adminOnly, (_req, res) => {
       sum(CASE WHEN status IN ('new','contacted','qualified','proposal') THEN coalesce(value_estimate, 0) END) AS pipeline,
       sum(CASE WHEN status = 'won' THEN coalesce(value_estimate, 0) END) AS wonValue
     FROM enquiries`);
-  const traffic = one<{ views: number; visitors: number }>(`
+  const traffic = await one<{ views: number; visitors: number }>(`
     SELECT count(*) AS views, count(DISTINCT session_id) AS visitors FROM events
     WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', '-7 days')`);
-  const subs = one<{ total: number; last7: number }>(`
+  const subs = await one<{ total: number; last7: number }>(`
     SELECT count(*) AS total, sum(datetime(created_at) >= datetime('now', '-7 days')) AS last7 FROM subscribers`);
-  const upcoming = one<{ c: number }>(
+  const upcoming = await one<{ c: number }>(
     "SELECT count(*) AS c FROM bookings WHERE slot_date >= ? AND status IN ('scheduled','confirmed')",
     today,
   );
@@ -838,93 +895,84 @@ app.get("/api/admin/overview", adminOnly, (_req, res) => {
       views7d: traffic.views ?? 0,
       visitors7d: traffic.visitors ?? 0,
     },
-    leadsSeries: dailySeries(
+    leadsSeries: await dailySeries(
       `SELECT date(created_at, '${TZ_MOD}') AS day, count(*) AS c FROM enquiries
        WHERE datetime(created_at) >= datetime('now', '-31 days') GROUP BY day`,
       30,
     ),
-    viewsSeries: dailySeries(
+    viewsSeries: await dailySeries(
       `SELECT date(created_at, '${TZ_MOD}') AS day, count(*) AS c FROM events
        WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', '-31 days') GROUP BY day`,
       30,
     ),
-    pipeline: db
-      .prepare("SELECT status, count(*) AS count, coalesce(sum(value_estimate), 0) AS value FROM enquiries GROUP BY status")
-      .all(),
-    sources: db.prepare("SELECT source, count(*) AS count FROM enquiries GROUP BY source ORDER BY count DESC").all(),
-    services: db
-      .prepare("SELECT service, count(*) AS count FROM enquiries GROUP BY service ORDER BY count DESC LIMIT 6")
-      .all(),
-    upcomingBookings: db
-      .prepare(
-        `SELECT id, reference, name, company_name AS companyName, topic, slot_date AS date, slot_time AS time, status, meeting_link AS meetingLink
-         FROM bookings WHERE slot_date >= ? AND status IN ('scheduled','confirmed') ORDER BY slot_date, slot_time LIMIT 6`,
-      )
-      .all(today),
-    recentLeads: db
-      .prepare(
-        `SELECT id, reference, name, company_name AS companyName, service, budget_range AS budget, status, priority, created_at AS createdAt
-         FROM enquiries ORDER BY datetime(created_at) DESC, id DESC LIMIT 6`,
-      )
-      .all(),
-    recentActivity: db.prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8").all(),
-    content: contentQ.counts.all(),
+    pipeline: await all(
+      "SELECT status, count(*) AS count, coalesce(sum(value_estimate), 0) AS value FROM enquiries GROUP BY status",
+    ),
+    sources: await all("SELECT source, count(*) AS count FROM enquiries GROUP BY source ORDER BY count DESC"),
+    services: await all("SELECT service, count(*) AS count FROM enquiries GROUP BY service ORDER BY count DESC LIMIT 6"),
+    upcomingBookings: await all(
+      `SELECT id, reference, name, company_name AS companyName, topic, slot_date AS date, slot_time AS time, status, meeting_link AS meetingLink
+       FROM bookings WHERE slot_date >= ? AND status IN ('scheduled','confirmed') ORDER BY slot_date, slot_time LIMIT 6`,
+      [today],
+    ),
+    recentLeads: await all(
+      `SELECT id, reference, name, company_name AS companyName, service, budget_range AS budget, status, priority, created_at AS createdAt
+       FROM enquiries ORDER BY datetime(created_at) DESC, id DESC LIMIT 6`,
+    ),
+    recentActivity: await all("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 8"),
+    content: await contentQ.counts(),
   });
 });
 
-app.get("/api/admin/analytics", adminOnly, (req, res) => {
+app.get("/api/admin/analytics", adminOnly, async (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 180);
   const since = `-${days} days`;
-  const series = dailySeries(
+  const series = await dailySeries(
     `SELECT date(created_at, '${TZ_MOD}') AS day, count(*) AS c FROM events
      WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', ?) GROUP BY day`,
     days,
     since,
   );
-  const visitors = dailySeries(
+  const visitors = await dailySeries(
     `SELECT date(created_at, '${TZ_MOD}') AS day, count(DISTINCT session_id) AS c FROM events
      WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', ?) GROUP BY day`,
     days,
     since,
   );
-  const totals = db
-    .prepare(
-      `SELECT count(*) AS views, count(DISTINCT session_id) AS visitors FROM events
+  const totals = (await get<{ views: number; visitors: number }>(
+    `SELECT count(*) AS views, count(DISTINCT session_id) AS visitors FROM events
        WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', ?)`,
-    )
-    .get(since) as { views: number; visitors: number };
-  const leads = db
-    .prepare("SELECT count(*) AS c FROM enquiries WHERE datetime(created_at) >= datetime('now', ?)")
-    .get(since) as { c: number };
+    [since],
+  ))!;
+  const leads = (await get<{ c: number }>(
+    "SELECT count(*) AS c FROM enquiries WHERE datetime(created_at) >= datetime('now', ?)",
+    [since],
+  ))!;
   ok(res, {
     days,
     totals: { ...totals, leads: leads.c, conversion: totals.visitors ? +((leads.c / totals.visitors) * 100).toFixed(2) : 0 },
     series: series.map((s, i) => ({ date: s.date, views: s.count, visitors: visitors[i]?.count ?? 0 })),
-    topPages: db
-      .prepare(
-        `SELECT path, count(*) AS views FROM events WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', ?)
+    topPages: await all(
+      `SELECT path, count(*) AS views FROM events WHERE name = 'page_view' AND datetime(created_at) >= datetime('now', ?)
          GROUP BY path ORDER BY views DESC LIMIT 10`,
-      )
-      .all(since),
-    topEvents: db
-      .prepare(
-        `SELECT name, count(*) AS count FROM events WHERE name != 'page_view' AND datetime(created_at) >= datetime('now', ?)
+      [since],
+    ),
+    topEvents: await all(
+      `SELECT name, count(*) AS count FROM events WHERE name != 'page_view' AND datetime(created_at) >= datetime('now', ?)
          GROUP BY name ORDER BY count DESC LIMIT 10`,
-      )
-      .all(since),
-    ctas: db
-      .prepare(
-        `SELECT coalesce(json_extract(meta, '$.label'), 'unknown') AS label, count(*) AS count FROM events
+      [since],
+    ),
+    ctas: await all(
+      `SELECT coalesce(json_extract(meta, '$.label'), 'unknown') AS label, count(*) AS count FROM events
          WHERE name = 'cta_click' AND datetime(created_at) >= datetime('now', ?) GROUP BY label ORDER BY count DESC LIMIT 10`,
-      )
-      .all(since),
-    referrers: db
-      .prepare(
-        `SELECT referrer, count(*) AS count FROM events
+      [since],
+    ),
+    referrers: await all(
+      `SELECT referrer, count(*) AS count FROM events
          WHERE name = 'page_view' AND referrer IS NOT NULL AND referrer != '' AND datetime(created_at) >= datetime('now', ?)
          GROUP BY referrer ORDER BY count DESC LIMIT 8`,
-      )
-      .all(since),
+      [since],
+    ),
   });
 });
 
@@ -935,28 +983,38 @@ const LEAD_COLUMNS = `id, reference, name, company_name AS companyName, email, p
   project_details AS details, status, priority, value_estimate AS valueEstimate, internal_notes AS notes, source,
   created_at AS createdAt, updated_at AS updatedAt`;
 
-app.get("/api/admin/enquiries", adminOnly, (_req, res) => {
-  ok(res, db.prepare(`SELECT ${LEAD_COLUMNS} FROM enquiries ORDER BY datetime(created_at) DESC, id DESC`).all());
+app.get("/api/admin/enquiries", adminOnly, async (_req, res) => {
+  ok(res, await all(`SELECT ${LEAD_COLUMNS} FROM enquiries ORDER BY datetime(created_at) DESC, id DESC`));
 });
 
-app.get("/api/admin/enquiries/:id", adminOnly, (req, res) => {
+app.get("/api/admin/enquiries/:id", adminOnly, async (req, res) => {
   const id = Number(req.params.id);
-  const lead = db.prepare(`SELECT ${LEAD_COLUMNS} FROM enquiries WHERE id = ?`).get(id);
+  const lead = await get(`SELECT ${LEAD_COLUMNS} FROM enquiries WHERE id = ?`, [id]);
   if (!lead) return fail(res, 404, "Lead not found.");
-  const notes = db
-    .prepare("SELECT id, kind, body, admin_name AS author, created_at AS createdAt FROM enquiry_notes WHERE enquiry_id = ? ORDER BY id DESC")
-    .all(id);
-  const booking = db
-    .prepare("SELECT id, reference, slot_date AS date, slot_time AS time, status FROM bookings WHERE enquiry_id = ?")
-    .get(id);
+  const notes = await all(
+    "SELECT id, kind, body, admin_name AS author, created_at AS createdAt FROM enquiry_notes WHERE enquiry_id = ? ORDER BY id DESC",
+    [id],
+  );
+  const booking = await get(
+    "SELECT id, reference, slot_date AS date, slot_time AS time, status FROM bookings WHERE enquiry_id = ?",
+    [id],
+  );
   ok(res, { ...(lead as object), activity: notes, booking: booking ?? null });
 });
 
-const addNote = db.prepare("INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)");
+async function addNote(enquiryId: number, adminId: number | null, adminName: string | null, kind: string, body: string) {
+  return run("INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)", [
+    enquiryId,
+    adminId,
+    adminName,
+    kind,
+    body,
+  ]);
+}
 
-app.patch("/api/admin/enquiries/:id", adminOnly, (req: AuthedRequest, res) => {
+app.patch("/api/admin/enquiries/:id", adminOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const lead = db.prepare("SELECT status, priority FROM enquiries WHERE id = ?").get(id) as { status: string; priority: string } | undefined;
+  const lead = await get<{ status: string; priority: string }>("SELECT status, priority FROM enquiries WHERE id = ?", [id]);
   if (!lead) return fail(res, 404, "Lead not found.");
   const b = req.body ?? {};
   const sets: string[] = [];
@@ -984,35 +1042,42 @@ app.patch("/api/admin/enquiries/:id", adminOnly, (req: AuthedRequest, res) => {
   }
   if (!sets.length) return fail(res, 400, "Nothing to update.");
 
-  db.transaction(() => {
-    db.prepare(`UPDATE enquiries SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`).run(...params, id);
-    if (b.status !== undefined && b.status !== lead.status) {
-      addNote.run(id, req.admin!.id, req.admin!.fullName, "status", `Status changed from ${lead.status} to ${b.status}`);
-    }
-    if (b.priority !== undefined && b.priority !== lead.priority) {
-      addNote.run(id, req.admin!.id, req.admin!.fullName, "priority", `Priority set to ${b.priority}`);
-    }
-  })();
-  audit(req, "LEAD_UPDATED", `LEAD_${id}`, Object.keys(b).join(", "));
-  ok(res, db.prepare(`SELECT ${LEAD_COLUMNS} FROM enquiries WHERE id = ?`).get(id));
+  const statements: Array<[string, Args?]> = [
+    [`UPDATE enquiries SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`, [...params, id] as Args],
+  ];
+  if (b.status !== undefined && b.status !== lead.status) {
+    statements.push([
+      "INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)",
+      [id, req.admin!.id, req.admin!.fullName, "status", `Status changed from ${lead.status} to ${b.status}`],
+    ]);
+  }
+  if (b.priority !== undefined && b.priority !== lead.priority) {
+    statements.push([
+      "INSERT INTO enquiry_notes (enquiry_id, admin_id, admin_name, kind, body) VALUES (?, ?, ?, ?, ?)",
+      [id, req.admin!.id, req.admin!.fullName, "priority", `Priority set to ${b.priority}`],
+    ]);
+  }
+  await tx(statements);
+  await audit(req, "LEAD_UPDATED", `LEAD_${id}`, Object.keys(b).join(", "));
+  ok(res, await get(`SELECT ${LEAD_COLUMNS} FROM enquiries WHERE id = ?`, [id]));
 });
 
-app.post("/api/admin/enquiries/:id/notes", adminOnly, (req: AuthedRequest, res) => {
+app.post("/api/admin/enquiries/:id/notes", adminOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   const body = str(req.body?.body, 4000);
   if (!body) return fail(res, 422, "Note can't be empty.");
-  if (!db.prepare("SELECT 1 FROM enquiries WHERE id = ?").get(id)) return fail(res, 404, "Lead not found.");
-  const info = addNote.run(id, req.admin!.id, req.admin!.fullName, "note", body);
-  db.prepare("UPDATE enquiries SET updated_at = datetime('now') WHERE id = ?").run(id);
-  audit(req, "LEAD_NOTE", `LEAD_${id}`);
+  if (!(await get("SELECT 1 FROM enquiries WHERE id = ?", [id]))) return fail(res, 404, "Lead not found.");
+  const info = await addNote(id, req.admin!.id, req.admin!.fullName, "note", body);
+  await run("UPDATE enquiries SET updated_at = datetime('now') WHERE id = ?", [id]);
+  await audit(req, "LEAD_NOTE", `LEAD_${id}`);
   ok(res, { id: Number(info.lastInsertRowid), kind: "note", body, author: req.admin!.fullName, createdAt: new Date().toISOString() }, 201);
 });
 
-app.delete("/api/admin/enquiries/:id", adminOnly, (req: AuthedRequest, res) => {
+app.delete("/api/admin/enquiries/:id", adminOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const info = db.prepare("DELETE FROM enquiries WHERE id = ?").run(id);
+  const info = await run("DELETE FROM enquiries WHERE id = ?", [id]);
   if (!info.changes) return fail(res, 404, "Lead not found.");
-  audit(req, "LEAD_DELETED", `LEAD_${id}`);
+  await audit(req, "LEAD_DELETED", `LEAD_${id}`);
   ok(res);
 });
 
@@ -1023,13 +1088,13 @@ const BOOKING_COLUMNS = `id, reference, name, email, phone, company_name AS comp
   slot_date AS date, slot_time AS time, timezone, status, meeting_link AS meetingLink, internal_notes AS internalNotes,
   enquiry_id AS enquiryId, created_at AS createdAt, updated_at AS updatedAt`;
 
-app.get("/api/admin/bookings", adminOnly, (_req, res) => {
-  ok(res, db.prepare(`SELECT ${BOOKING_COLUMNS} FROM bookings ORDER BY slot_date DESC, slot_time DESC`).all());
+app.get("/api/admin/bookings", adminOnly, async (_req, res) => {
+  ok(res, await all(`SELECT ${BOOKING_COLUMNS} FROM bookings ORDER BY slot_date DESC, slot_time DESC`));
 });
 
-app.patch("/api/admin/bookings/:id", adminOnly, (req: AuthedRequest, res) => {
+app.patch("/api/admin/bookings/:id", adminOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const booking = db.prepare("SELECT * FROM bookings WHERE id = ?").get(id) as { status: string } | undefined;
+  const booking = await get<{ status: string }>("SELECT * FROM bookings WHERE id = ?", [id]);
   if (!booking) return fail(res, 404, "Booking not found.");
   const b = req.body ?? {};
   const sets: string[] = [];
@@ -1058,35 +1123,35 @@ app.patch("/api/admin/bookings/:id", adminOnly, (req: AuthedRequest, res) => {
   }
   if (!sets.length) return fail(res, 400, "Nothing to update.");
   try {
-    db.prepare(`UPDATE bookings SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`).run(...params, id);
+    await run(`UPDATE bookings SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`, [...params, id] as Args);
   } catch (err) {
     if (String((err as Error).message).includes("UNIQUE")) return fail(res, 409, "Another call is already booked in that slot.");
     throw err;
   }
-  audit(req, "BOOKING_UPDATED", `BOOKING_${id}`, Object.keys(b).join(", "));
-  ok(res, db.prepare(`SELECT ${BOOKING_COLUMNS} FROM bookings WHERE id = ?`).get(id));
+  await audit(req, "BOOKING_UPDATED", `BOOKING_${id}`, Object.keys(b).join(", "));
+  ok(res, await get(`SELECT ${BOOKING_COLUMNS} FROM bookings WHERE id = ?`, [id]));
 });
 
-app.delete("/api/admin/bookings/:id", adminOnly, (req: AuthedRequest, res) => {
+app.delete("/api/admin/bookings/:id", adminOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const info = db.prepare("DELETE FROM bookings WHERE id = ?").run(id);
+  const info = await run("DELETE FROM bookings WHERE id = ?", [id]);
   if (!info.changes) return fail(res, 404, "Booking not found.");
-  audit(req, "BOOKING_DELETED", `BOOKING_${id}`);
+  await audit(req, "BOOKING_DELETED", `BOOKING_${id}`);
   ok(res);
 });
 
 /* ------------------------------------------------------------------ */
 /* Admin — subscribers                                                */
 /* ------------------------------------------------------------------ */
-app.get("/api/admin/subscribers", adminOnly, (_req, res) => {
-  ok(res, db.prepare("SELECT id, email, source, created_at AS createdAt FROM subscribers ORDER BY id DESC").all());
+app.get("/api/admin/subscribers", adminOnly, async (_req, res) => {
+  ok(res, await all("SELECT id, email, source, created_at AS createdAt FROM subscribers ORDER BY id DESC"));
 });
 
-app.delete("/api/admin/subscribers/:id", adminOnly, (req: AuthedRequest, res) => {
+app.delete("/api/admin/subscribers/:id", adminOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const info = db.prepare("DELETE FROM subscribers WHERE id = ?").run(id);
+  const info = await run("DELETE FROM subscribers WHERE id = ?", [id]);
   if (!info.changes) return fail(res, 404, "Subscriber not found.");
-  audit(req, "SUBSCRIBER_DELETED", `SUBSCRIBER_${id}`);
+  await audit(req, "SUBSCRIBER_DELETED", `SUBSCRIBER_${id}`);
   ok(res);
 });
 
@@ -1130,13 +1195,13 @@ function validateDoc(name: CollectionName, data: unknown): string | null {
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
 
-app.get("/api/admin/content/:collection", anyAdmin, (req, res) => {
+app.get("/api/admin/content/:collection", anyAdmin, async (req, res) => {
   const name = collectionParam(req, res);
   if (!name) return;
-  ok(res, (contentQ.listAll.all(name) as ContentRow[]).map(parseRow));
+  ok(res, (await contentQ.listAll(name)).map(parseRow));
 });
 
-app.post("/api/admin/content/:collection", anyAdmin, (req: AuthedRequest, res) => {
+app.post("/api/admin/content/:collection", anyAdmin, async (req: AuthedRequest, res) => {
   const name = collectionParam(req, res);
   if (!name) return;
   const data = req.body?.data;
@@ -1145,25 +1210,25 @@ app.post("/api/admin/content/:collection", anyAdmin, (req: AuthedRequest, res) =
   const doc = data as Record<string, unknown>;
   const base = str(req.body?.id, 80) || str(doc.id, 80) || slugify(String(doc.title ?? doc.name ?? doc.q ?? "item"));
   let id = slugify(base) || `item-${Date.now().toString(36)}`;
-  while (contentQ.get.get(name, id)) id = `${slugify(base).slice(0, 70)}-${crypto.randomBytes(2).toString("hex")}`;
+  while (await contentQ.get(name, id)) id = `${slugify(base).slice(0, 70)}-${crypto.randomBytes(2).toString("hex")}`;
   if (!ID_RE.test(id)) return fail(res, 422, "Invalid ID — use lowercase letters, numbers and dashes.");
-  const { m } = contentQ.maxSort.get(name) as { m: number };
-  contentQ.insert.run({
+  const { m } = (await contentQ.maxSort(name)) ?? { m: 0 };
+  await contentQ.insert({
     collection: name,
     id,
     data: JSON.stringify({ ...doc, id }),
     sort_order: m + 10,
     published: req.body?.published === false ? 0 : 1,
   });
-  audit(req, "CONTENT_CREATED", `${name}/${id}`, String(doc.title ?? doc.name ?? doc.q ?? ""));
-  ok(res, parseRow(contentQ.get.get(name, id) as ContentRow), 201);
+  await audit(req, "CONTENT_CREATED", `${name}/${id}`, String(doc.title ?? doc.name ?? doc.q ?? ""));
+  ok(res, parseRow((await contentQ.get(name, id)) as ContentRow), 201);
 });
 
-app.put("/api/admin/content/:collection/:id", anyAdmin, (req: AuthedRequest, res) => {
+app.put("/api/admin/content/:collection/:id", anyAdmin, async (req: AuthedRequest, res) => {
   const name = collectionParam(req, res);
   if (!name) return;
   const currentId = String(req.params.id);
-  const row = contentQ.get.get(name, currentId) as ContentRow | undefined;
+  const row = await contentQ.get(name, currentId);
   if (!row) return fail(res, 404, "Entry not found.");
   const data = req.body?.data;
   const error = validateDoc(name, data);
@@ -1173,56 +1238,61 @@ app.put("/api/admin/content/:collection/:id", anyAdmin, (req: AuthedRequest, res
   const requested = str(req.body?.newId, 80);
   if (requested && requested !== currentId) {
     if (!ID_RE.test(requested)) return fail(res, 422, "Invalid ID — use lowercase letters, numbers and dashes.");
-    if (contentQ.get.get(name, requested)) return fail(res, 409, "Another entry already uses that ID.");
-    contentQ.rename.run(requested, name, currentId);
+    if (await contentQ.get(name, requested)) return fail(res, 409, "Another entry already uses that ID.");
+    await contentQ.rename(requested, name, currentId);
     id = requested;
   }
-  contentQ.update.run({
+  await contentQ.update({
     collection: name,
     id,
     data: JSON.stringify({ ...(data as object), id }),
     published: req.body?.published === undefined ? row.published : req.body.published ? 1 : 0,
     sort_order: Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : row.sort_order,
   });
-  audit(req, "CONTENT_UPDATED", `${name}/${id}`);
-  ok(res, parseRow(contentQ.get.get(name, id) as ContentRow));
+  await audit(req, "CONTENT_UPDATED", `${name}/${id}`);
+  ok(res, parseRow((await contentQ.get(name, id)) as ContentRow));
 });
 
-app.delete("/api/admin/content/:collection/:id", anyAdmin, (req: AuthedRequest, res) => {
+app.delete("/api/admin/content/:collection/:id", anyAdmin, async (req: AuthedRequest, res) => {
   const name = collectionParam(req, res);
   if (!name) return;
-  const info = contentQ.remove.run(name, String(req.params.id));
+  const info = await contentQ.remove(name, String(req.params.id));
   if (!info.changes) return fail(res, 404, "Entry not found.");
-  audit(req, "CONTENT_DELETED", `${name}/${req.params.id}`);
+  await audit(req, "CONTENT_DELETED", `${name}/${req.params.id}`);
   ok(res);
 });
 
-app.post("/api/admin/content/:collection/reorder", anyAdmin, (req: AuthedRequest, res) => {
+app.post("/api/admin/content/:collection/reorder", anyAdmin, async (req: AuthedRequest, res) => {
   const name = collectionParam(req, res);
   if (!name) return;
   const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map(String) : [];
   if (!ids.length) return fail(res, 422, "Provide the new order as an array of IDs.");
-  db.transaction(() => ids.forEach((id, i) => contentQ.setSort.run((i + 1) * 10, name, id)))();
-  audit(req, "CONTENT_REORDERED", name);
-  ok(res, (contentQ.listAll.all(name) as ContentRow[]).map(parseRow));
+  await tx(
+    ids.map((id, i) => [
+      "UPDATE content SET sort_order = ?, updated_at = datetime('now') WHERE collection = ? AND id = ?",
+      [(i + 1) * 10, name, id],
+    ]),
+  );
+  await audit(req, "CONTENT_REORDERED", name);
+  ok(res, (await contentQ.listAll(name)).map(parseRow));
 });
 
-app.post("/api/admin/content/:collection/reset", adminOnly, (req: AuthedRequest, res) => {
+app.post("/api/admin/content/:collection/reset", adminOnly, async (req: AuthedRequest, res) => {
   const name = collectionParam(req, res);
   if (!name) return;
-  seedCollection(name);
-  audit(req, "CONTENT_RESET", name, "Restored shipped defaults");
-  ok(res, (contentQ.listAll.all(name) as ContentRow[]).map(parseRow));
+  await seedCollection(name);
+  await audit(req, "CONTENT_RESET", name, "Restored shipped defaults");
+  ok(res, (await contentQ.listAll(name)).map(parseRow));
 });
 
 /* ------------------------------------------------------------------ */
 /* Admin — settings                                                   */
 /* ------------------------------------------------------------------ */
-app.get("/api/admin/settings", anyAdmin, (_req, res) => {
-  ok(res, { site: siteSettings(), advanced: advancedSettings() });
+app.get("/api/admin/settings", anyAdmin, async (_req, res) => {
+  ok(res, { site: await siteSettings(), advanced: await advancedSettings() });
 });
 
-app.put("/api/admin/settings/:key", adminOnly, (req: AuthedRequest, res) => {
+app.put("/api/admin/settings/:key", adminOnly, async (req: AuthedRequest, res) => {
   const key = req.params.key;
   if (key !== "site" && key !== "advanced") return fail(res, 404, "Unknown settings group.");
   const value = req.body?.value;
@@ -1245,28 +1315,28 @@ app.put("/api/admin/settings/:key", adminOnly, (req: AuthedRequest, res) => {
     }
     if (a.budgetRanges && !Array.isArray(a.budgetRanges)) return fail(res, 422, "budgetRanges must be an array.");
   }
-  writeSetting(key, deepMerge(key === "site" ? siteSettings() : advancedSettings(), value));
-  audit(req, "SETTINGS_UPDATED", `SETTINGS_${key.toUpperCase()}`);
-  ok(res, key === "site" ? siteSettings() : advancedSettings());
+  await writeSetting(key, deepMerge(key === "site" ? await siteSettings() : await advancedSettings(), value));
+  await audit(req, "SETTINGS_UPDATED", `SETTINGS_${key.toUpperCase()}`);
+  ok(res, key === "site" ? await siteSettings() : await advancedSettings());
 });
 
 /* ------------------------------------------------------------------ */
 /* Admin — audit, users, export                                       */
 /* ------------------------------------------------------------------ */
-app.get("/api/admin/audit", adminOnly, (req, res) => {
+app.get("/api/admin/audit", adminOnly, async (req, res) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 100, 10), 500);
-  ok(res, db.prepare("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?").all(limit));
+  ok(res, await all("SELECT * FROM audit_logs ORDER BY id DESC LIMIT ?", [limit]));
 });
 
-app.get("/api/admin/users", ownerOnly, (_req, res) => {
-  ok(res, (userQ.list.all() as { id: number; email: string; full_name: string; role: string; active: number; last_login_at: string; created_at: string }[]).map((u) => ({
+app.get("/api/admin/users", ownerOnly, async (_req, res) => {
+  ok(res, (await userQ.list()).map((u) => ({
     ...publicUser(u),
     active: u.active === 1,
     createdAt: u.created_at,
   })));
 });
 
-app.post("/api/admin/users", ownerOnly, (req: AuthedRequest, res) => {
+app.post("/api/admin/users", ownerOnly, async (req: AuthedRequest, res) => {
   const email = str(req.body?.email, 160).toLowerCase();
   const fullName = str(req.body?.fullName, 120);
   const role = String(req.body?.role ?? "editor") as AdminRole;
@@ -1275,71 +1345,75 @@ app.post("/api/admin/users", ownerOnly, (req: AuthedRequest, res) => {
   if (fullName.length < 2) return fail(res, 422, "Please provide the person's name.");
   if (!(ADMIN_ROLES as readonly string[]).includes(role)) return fail(res, 422, "Invalid role.");
   if (password.length < 10) return fail(res, 422, "Temporary password must be at least 10 characters.");
-  if (userQ.byEmail.get(email)) return fail(res, 409, "A user with that email already exists.");
+  if (await userQ.byEmail(email)) return fail(res, 409, "A user with that email already exists.");
   const { hash, salt } = hashPassword(password);
-  const info = db
-    .prepare("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, ?)")
-    .run(email, hash, salt, fullName, role);
-  audit(req, "USER_CREATED", `USER_${info.lastInsertRowid}`, `${email} as ${role}`);
+  const info = await run("INSERT INTO admin_users (email, password_hash, salt, full_name, role) VALUES (?, ?, ?, ?, ?)", [
+    email,
+    hash,
+    salt,
+    fullName,
+    role,
+  ]);
+  await audit(req, "USER_CREATED", `USER_${info.lastInsertRowid}`, `${email} as ${role}`);
   ok(res, { id: Number(info.lastInsertRowid) }, 201);
 });
 
-app.patch("/api/admin/users/:id", ownerOnly, (req: AuthedRequest, res) => {
+app.patch("/api/admin/users/:id", ownerOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
-  const user = userQ.byId.get(id) as { id: number; role: AdminRole; active: number } | undefined;
+  const user = await userQ.byId<{ id: number; role: AdminRole; active: number }>(id);
   if (!user) return fail(res, 404, "User not found.");
   const b = req.body ?? {};
   const demotingOwner =
     user.role === "owner" && ((b.role !== undefined && b.role !== "owner") || b.active === false);
-  if (demotingOwner && (userQ.owners.get() as { c: number }).c <= 1) {
+  if (demotingOwner && ((await userQ.owners()) ?? { c: 0 }).c <= 1) {
     return fail(res, 422, "At least one active owner is required.");
   }
   if (b.role !== undefined) {
     if (!(ADMIN_ROLES as readonly string[]).includes(b.role)) return fail(res, 422, "Invalid role.");
-    db.prepare("UPDATE admin_users SET role = ? WHERE id = ?").run(b.role, id);
+    await run("UPDATE admin_users SET role = ? WHERE id = ?", [b.role, id]);
   }
-  if (b.fullName !== undefined) db.prepare("UPDATE admin_users SET full_name = ? WHERE id = ?").run(str(b.fullName, 120), id);
+  if (b.fullName !== undefined) await run("UPDATE admin_users SET full_name = ? WHERE id = ?", [str(b.fullName, 120), id]);
   if (b.active !== undefined) {
-    db.prepare("UPDATE admin_users SET active = ? WHERE id = ?").run(b.active ? 1 : 0, id);
-    if (!b.active) db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+    await run("UPDATE admin_users SET active = ? WHERE id = ?", [b.active ? 1 : 0, id]);
+    if (!b.active) await run("DELETE FROM sessions WHERE user_id = ?", [id]);
   }
   if (b.password !== undefined) {
     if (typeof b.password !== "string" || b.password.length < 10) return fail(res, 422, "Password must be at least 10 characters.");
     const { hash, salt } = hashPassword(b.password);
-    userQ.setPassword.run(hash, salt, id);
-    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+    await userQ.setPassword(hash, salt, id);
+    await run("DELETE FROM sessions WHERE user_id = ?", [id]);
   }
-  audit(req, "USER_UPDATED", `USER_${id}`, Object.keys(b).filter((k) => k !== "password").join(", ") || "password");
+  await audit(req, "USER_UPDATED", `USER_${id}`, Object.keys(b).filter((k) => k !== "password").join(", ") || "password");
   ok(res);
 });
 
-app.delete("/api/admin/users/:id", ownerOnly, (req: AuthedRequest, res) => {
+app.delete("/api/admin/users/:id", ownerOnly, async (req: AuthedRequest, res) => {
   const id = Number(req.params.id);
   if (id === req.admin!.id) return fail(res, 422, "You can't delete your own account.");
-  const info = db.prepare("DELETE FROM admin_users WHERE id = ?").run(id);
+  const info = await run("DELETE FROM admin_users WHERE id = ?", [id]);
   if (!info.changes) return fail(res, 404, "User not found.");
-  audit(req, "USER_DELETED", `USER_${id}`);
+  await audit(req, "USER_DELETED", `USER_${id}`);
   ok(res);
 });
 
-app.get("/api/admin/export", adminOnly, (req: AuthedRequest, res) => {
+app.get("/api/admin/export", adminOnly, async (req: AuthedRequest, res) => {
   const scope = req.query.scope === "all" ? "all" : "content";
   if (scope === "all" && req.admin!.role !== "owner") return fail(res, 403, "Only owners can export customer data.");
   const collections = Object.fromEntries(
-    COLLECTION_NAMES.map((name) => [name, (contentQ.listAll.all(name) as ContentRow[]).map(parseRow)]),
+    await Promise.all(COLLECTION_NAMES.map(async (name) => [name, (await contentQ.listAll(name)).map(parseRow)])),
   );
   const payload: Record<string, unknown> = {
     exportedAt: new Date().toISOString(),
     scope,
-    settings: { site: siteSettings(), advanced: advancedSettings() },
+    settings: { site: await siteSettings(), advanced: await advancedSettings() },
     collections,
   };
   if (scope === "all") {
-    payload.enquiries = db.prepare(`SELECT ${LEAD_COLUMNS} FROM enquiries`).all();
-    payload.bookings = db.prepare(`SELECT ${BOOKING_COLUMNS} FROM bookings`).all();
-    payload.subscribers = db.prepare("SELECT email, source, created_at FROM subscribers").all();
+    payload.enquiries = await all(`SELECT ${LEAD_COLUMNS} FROM enquiries`);
+    payload.bookings = await all(`SELECT ${BOOKING_COLUMNS} FROM bookings`);
+    payload.subscribers = await all("SELECT email, source, created_at FROM subscribers");
   }
-  audit(req, "EXPORT", `EXPORT_${scope.toUpperCase()}`);
+  await audit(req, "EXPORT", `EXPORT_${scope.toUpperCase()}`);
   res.setHeader("Content-Disposition", `attachment; filename="novaframe-${scope}-${dateInTz("UTC")}.json"`);
   ok(res, payload);
 });
@@ -1378,6 +1452,8 @@ app.use((err: Error & { type?: string; status?: number }, _req: Request, res: Re
   console.error("[api] Unhandled error:", err);
   fail(res, 500, "Something went wrong on our side. Please try again.");
 });
+
+await initDb();
 
 app.listen(PORT, () => {
   console.log(`\n  > Novaframe API ready:  http://localhost:${PORT}/api/health`);
