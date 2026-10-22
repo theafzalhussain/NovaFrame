@@ -326,8 +326,57 @@ function public_user(array $u): array
 /* ================================================================== */
 /* Analytics helpers                                                  */
 /* ================================================================== */
-function tz_minutes(): int
+/* ------------------------------------------------------------------ */
+/* Media library — images uploaded from the admin console             */
+/* ------------------------------------------------------------------ */
+const MEDIA_TYPES = [
+    'image/jpeg' => 'jpg',
+    'image/png' => 'png',
+    'image/webp' => 'webp',
+    'image/avif' => 'avif',
+    'image/gif' => 'gif',
+];
+const MEDIA_MAX_BYTES = 4194304; // 4 MB
+
+/** Created on demand so installs made before this feature don't need a schema re-import. */
+function media_table(): void
 {
+    q('CREATE TABLE IF NOT EXISTS media (
+        id          VARCHAR(100) NOT NULL,
+        filename    VARCHAR(160) NOT NULL,
+        mime_type   VARCHAR(40)  NOT NULL,
+        bytes       INT UNSIGNED NOT NULL,
+        data_base64 LONGTEXT     NOT NULL,
+        uploaded_by VARCHAR(160)     NULL,
+        created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_media_created (created_at)
+    ) ENGINE = InnoDB');
+}
+
+/** Magic-byte check so a renamed file can't be stored as an image. */
+function sniff_image(string $buf, string $mime): bool
+{
+    if (strlen($buf) < 12) {
+        return false;
+    }
+    switch ($mime) {
+        case 'image/jpeg':
+            return substr($buf, 0, 3) === "\xFF\xD8\xFF";
+        case 'image/png':
+            return substr($buf, 0, 8) === "\x89PNG\r\n\x1A\n";
+        case 'image/gif':
+            return substr($buf, 0, 4) === 'GIF8';
+        case 'image/webp':
+            return substr($buf, 0, 4) === 'RIFF' && substr($buf, 8, 4) === 'WEBP';
+        case 'image/avif':
+            return substr($buf, 4, 4) === 'ftyp';
+        default:
+            return false;
+    }
+}
+
+function tz_minutes(): int{
     return (int) env('TZ_OFFSET_MINUTES');
 }
 function daily_series(string $sql, int $days, array $params = []): array
@@ -360,8 +409,11 @@ if (($pos = strpos($path, '/api.php')) !== false) {
 $route = '/' . trim($route, '/');
 
 $raw = file_get_contents('php://input') ?: '';
-$body = $raw === '' ? [] : json_decode($raw, true);
-if ($raw !== '' && !is_array($body)) {
+// Image uploads POST raw bytes with an image/* content type — never JSON-decode those.
+$contentType = strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? ''));
+$jsonBody = $contentType === '' || str_contains($contentType, 'json');
+$body = ($jsonBody && $raw !== '') ? json_decode($raw, true) : [];
+if ($jsonBody && $raw !== '' && !is_array($body)) {
     fail(400, 'Malformed JSON body.');
 }
 $body = is_array($body) ? $body : [];
@@ -406,6 +458,28 @@ function dispatch(string $method, string $route, array $b): void
             fail(404, 'Unknown collection.');
         }
         ok(published($m[1]));
+    }
+
+    /** Serve an image uploaded from the admin console. Ids carry a random suffix, so they cache forever. */
+    if (preg_match('#^/media/([a-z0-9][a-z0-9-]{0,80}\.(?:jpg|png|webp|avif|gif))$#', strtolower($route), $m) && $method === 'GET') {
+        try {
+            // No DDL on this hot path: if the table doesn't exist yet, nothing was ever uploaded.
+            $row = one('SELECT mime_type, data_base64 FROM media WHERE id = ?', [$m[1]]);
+        } catch (Throwable $e) {
+            $row = null;
+        }
+        $bytes = $row ? base64_decode((string) $row['data_base64'], true) : false;
+        if ($bytes === false) {
+            fail(404, 'Image not found.');
+        }
+        header('Content-Type: ' . $row['mime_type']);
+        header('Content-Length: ' . strlen($bytes));
+        header('Cache-Control: public, max-age=31536000, immutable');
+        // Defensive: these bytes are user-supplied, so never let them run as a document.
+        header("Content-Security-Policy: default-src 'none'; img-src 'self' data:; sandbox");
+        header('Cross-Origin-Resource-Policy: cross-origin');
+        echo $bytes;
+        exit;
     }
 
     if ($route === '/enquiries' && $method === 'POST') {
@@ -944,6 +1018,59 @@ function dispatch(string $method, string $route, array $b): void
                 ok();
             }
         }
+    }
+
+    /* -------------------------- Media -------------------------- */
+    if ($route === '/admin/media' && $method === 'POST') {
+        $me = require_role('editor');
+        rate_limit('upload:' . client_ip(), 120, 3600, 'Too many uploads — please wait a few minutes.');
+        $mime = trim(explode(';', strtolower((string) ($_SERVER['CONTENT_TYPE'] ?? '')))[0]);
+        $ext = MEDIA_TYPES[$mime] ?? '';
+        if ($ext === '') {
+            fail(415, 'Please upload a JPG, PNG, WebP, AVIF or GIF image.');
+        }
+        $bytes = file_get_contents('php://input') ?: '';
+        if ($bytes === '') {
+            fail(422, 'The upload was empty — please choose the file again. (If large images always fail, raise post_max_size on the host.)');
+        }
+        if (strlen($bytes) > MEDIA_MAX_BYTES) {
+            fail(413, 'Images must be 4 MB or smaller.');
+        }
+        if (!sniff_image($bytes, $mime)) {
+            fail(415, "That file doesn't look like a real image.");
+        }
+        $original = s($_GET['name'] ?? '', 120) ?: "image.$ext";
+        $base = substr(slugify((string) preg_replace('/\.[A-Za-z0-9]+$/', '', $original)), 0, 64) ?: 'image';
+        $id = $base . '-' . bin2hex(random_bytes(4)) . '.' . $ext;
+        media_table();
+        q('INSERT INTO media (id, filename, mime_type, bytes, data_base64, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)', [
+            $id, $original, $mime, strlen($bytes), base64_encode($bytes), $me['email'],
+        ]);
+        audit('MEDIA_UPLOADED', "MEDIA_$id", $mime . ' · ' . round(strlen($bytes) / 1024) . ' kB');
+        // `path` is relative to the API base so the client can build the right URL.
+        ok(['id' => $id, 'path' => "/media/$id", 'bytes' => strlen($bytes), 'mimeType' => $mime], 201);
+    }
+
+    if ($route === '/admin/media' && $method === 'GET') {
+        require_role('editor');
+        media_table();
+        $rows = all_rows('SELECT id, filename, mime_type AS mimeType, bytes, created_at AS createdAt FROM media ORDER BY created_at DESC LIMIT 200');
+        ok(array_map(function (array $r): array {
+            $r['path'] = '/media/' . $r['id'];
+            $r['bytes'] = (int) $r['bytes'];
+            return $r;
+        }, $rows));
+    }
+
+    if (preg_match('#^/admin/media/([A-Za-z0-9][A-Za-z0-9.-]{0,99})$#', $route, $m) && $method === 'DELETE') {
+        require_role('admin');
+        media_table();
+        $stmt = q('DELETE FROM media WHERE id = ?', [strtolower($m[1])]);
+        if ($stmt->rowCount() === 0) {
+            fail(404, 'Image not found.');
+        }
+        audit('MEDIA_DELETED', 'MEDIA_' . strtolower($m[1]));
+        ok();
     }
 
     /* -------------------------- Settings -------------------------- */

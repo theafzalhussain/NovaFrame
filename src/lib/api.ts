@@ -19,9 +19,12 @@ export type ApiResult<T> = {
   offline?: boolean;
 };
 
-const BASE = ((import.meta.env?.VITE_API_URL as string | undefined) || "/api").replace(/\/+$/, "");
+const API_BASE = ((import.meta.env?.VITE_API_URL as string | undefined) || "/api").replace(/\/+$/, "");
+const BASE = API_BASE;
 const TOKEN_KEY = "nf_admin_token";
 const DEMO_TOKEN = "demo-workspace";
+
+export { API_BASE };
 
 /* ------------------------------------------------------------------ */
 /* Session storage                                                    */

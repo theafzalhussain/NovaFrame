@@ -167,6 +167,20 @@ CREATE TABLE IF NOT EXISTS settings (
   PRIMARY KEY (setting_key)
 ) ENGINE = InnoDB;
 
+-- Images uploaded from the admin console (base64 so no binary binding is needed).
+-- Created automatically on first upload too, so an existing install needs no re-import.
+CREATE TABLE IF NOT EXISTS media (
+  id          VARCHAR(100) NOT NULL,
+  filename    VARCHAR(160) NOT NULL,
+  mime_type   VARCHAR(40)  NOT NULL,
+  bytes       INT UNSIGNED NOT NULL,
+  data_base64 LONGTEXT     NOT NULL,
+  uploaded_by VARCHAR(160)     NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_media_created (created_at)
+) ENGINE = InnoDB;
+
 -- Fixed-window rate limiting for public forms and sign-in (PHP has no shared memory).
 CREATE TABLE IF NOT EXISTS rate_limits (
   bucket   VARCHAR(190) NOT NULL,

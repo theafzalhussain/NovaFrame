@@ -70,7 +70,7 @@ export const schemas: Record<CollectionName, CollectionSchema> = {
       { key: "liveUrl", label: "Live URL", type: "url", placeholder: "https://" },
       { key: "repoUrl", label: "Repository URL", type: "url", placeholder: "https://github.com/…" },
       { key: "visual", label: "Visual style", type: "select", options: [{ value: "browser", label: "Screenshot in browser frame" }, { value: "terminal", label: "Terminal transcript" }, { value: "monogram", label: "Gold monogram" }] },
-      { key: "cover", label: "Screenshot", type: "image", hint: "Tall full-page captures auto-scroll on hover", showIf: { key: "visual", equals: "browser" } },
+      { key: "cover", label: "Screenshot", type: "image", wide: true, hint: "Upload a screenshot · tall full-page captures auto-scroll on hover", showIf: { key: "visual", equals: "browser" } },
       { key: "preview", label: "Terminal lines", type: "lines", rows: 5, wide: true, showIf: { key: "visual", equals: "terminal" } },
       { key: "summary", label: "Summary", type: "textarea", required: true, rows: 3, wide: true },
       { key: "problem", label: "Why we built it / The problem", type: "textarea", rows: 4, wide: true },

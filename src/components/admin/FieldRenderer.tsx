@@ -1,8 +1,9 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState, type DragEvent } from "react";
 import type { InsightBlock } from "../../data/types";
 import { Icon } from "../Icons";
 import { cn } from "../../utils/cn";
-import { FieldShell, IconPicker, LinesInput, TagsInput, Toggle } from "./AdminUI";
+import { IMAGE_ACCEPT, formatBytes, uploadImage } from "../../lib/media";
+import { FieldShell, IconPicker, LinesInput, Spinner, TagsInput, Toggle, useToast } from "./AdminUI";
 import { getPath, setPath, type FieldDef } from "./schemas";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -76,16 +77,7 @@ export function FieldInput({ field, doc, onChange }: Props) {
         </FieldShell>
       );
     case "image":
-      return (
-        <FieldShell label={field.label} hint={field.hint ?? "Path in /public (e.g. /projects/x.jpg) or a full URL"}>
-          <div className="flex items-start gap-3">
-            <div className="grid h-[74px] w-[110px] shrink-0 place-items-center overflow-hidden rounded-xl border border-gold-300/12 bg-ink-950">
-              {value ? <img src={String(value)} alt="" className="h-full w-full object-cover object-top" /> : <Icon name="image" className="h-5 w-5 text-smoke" />}
-            </div>
-            <input id={id} className="field" placeholder="/projects/screenshot.jpg" value={String(value ?? "")} onChange={(e) => set(e.target.value)} />
-          </div>
-        </FieldShell>
-      );
+      return <ImageField field={field} id={id} value={String(value ?? "")} onChange={set} />;
     case "days": {
       const days = Array.isArray(value) ? (value as number[]) : [];
       return (
@@ -128,8 +120,128 @@ export function FieldInput({ field, doc, onChange }: Props) {
   }
 }
 
-function move<T>(list: T[], from: number, to: number) {
-  const next = [...list];
+/* ================================================================== */
+/* Image field — upload from the device, link is optional             */
+/* ================================================================== */
+const fileName = (url: string) => url.split("?")[0].split("/").pop() || url;
+
+function ImageField({ field, id, value, onChange }: { field: FieldDef; id: string; value: string; onChange: (v: string) => void }) {
+  const toast = useToast();
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [broken, setBroken] = useState(false);
+
+  const browse = () => fileRef.current?.click();
+
+  const take = async (file: File | null | undefined) => {
+    if (!file || busy) return;
+    setBusy(true);
+    const res = await uploadImage(file);
+    setBusy(false);
+    if (res.ok && res.data) {
+      setBroken(false);
+      onChange(res.data.url);
+      toast(`Image added — ${formatBytes(res.data.bytes)}.`);
+    } else {
+      toast(res.error ?? "Couldn't upload that image.", "error");
+    }
+  };
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    void take(e.dataTransfer.files?.[0]);
+  };
+
+  return (
+    <FieldShell label={field.label} hint={field.hint ?? "JPG, PNG, WebP or GIF · up to 4 MB"} required={field.required}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          void take(e.target.files?.[0]);
+          e.target.value = ""; // allow re-picking the same file
+        }}
+      />
+
+      {value ? (
+        <div className="overflow-hidden rounded-2xl border border-gold-300/12 bg-ink-950">
+          <div className="relative grid min-h-[96px] place-items-center">
+            {broken ? (
+              <p className="flex items-center gap-2 px-4 py-8 text-center text-[12.5px] text-smoke">
+                <Icon name="alert" className="h-4 w-4 text-ember" /> This image couldn't be loaded — upload a new one.
+              </p>
+            ) : (
+              <img src={value} alt="" className="max-h-56 w-full object-cover object-top" onError={() => setBroken(true)} onLoad={() => setBroken(false)} />
+            )}
+            {busy ? (
+              <div className="absolute inset-0 grid place-items-center bg-ink-950/70">
+                <Spinner className="h-5 w-5" />
+              </div>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-1.5 border-t border-gold-300/10 bg-ink-900/60 px-2.5 py-2">
+            <button type="button" onClick={browse} disabled={busy} className="btn btn-ghost btn-sm h-8 disabled:opacity-50">
+              <Icon name="upload" className="h-3.5 w-3.5" /> Replace
+            </button>
+            <button type="button" onClick={() => onChange("")} disabled={busy} className="btn btn-ghost btn-sm h-8 text-ember/90 hover:text-ember disabled:opacity-50">
+              <Icon name="trash" className="h-3.5 w-3.5" /> Remove
+            </button>
+            <span className="ml-auto max-w-[45%] truncate pr-1 font-mono text-[10.5px] text-smoke" title={value}>
+              {fileName(value)}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={browse}
+          disabled={busy}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          className={cn(
+            "flex w-full flex-col items-center gap-1.5 rounded-2xl border border-dashed px-4 py-7 text-center transition",
+            dragging ? "border-gold-300/70 bg-gold-300/[0.07]" : "border-gold-300/25 hover:border-gold-300/55 hover:bg-gold-300/[0.04]",
+          )}
+        >
+          <span className="icon-tile h-10 w-10 rounded-xl">{busy ? <Spinner /> : <Icon name="image" className="h-4 w-4" />}</span>
+          <span className="mt-1 text-[13.5px] font-semibold text-gold-100">{busy ? "Uploading…" : "Upload image"}</span>
+          <span className="text-[11.5px] text-smoke">Drag & drop or click to browse</span>
+        </button>
+      )}
+
+      <div className="mt-2">
+        <button type="button" onClick={() => setLinkOpen((v) => !v)} className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-smoke transition hover:text-gold-200">
+          <Icon name="link" className="h-3.5 w-3.5" />
+          {linkOpen ? "Hide link field" : "Or use an image link"}
+          <span className="text-smoke/70">(optional)</span>
+        </button>
+        {linkOpen ? (
+          <input
+            id={id}
+            className="field field-sm mt-2"
+            placeholder="/projects/screenshot.jpg or https://…"
+            value={value}
+            onChange={(e) => {
+              setBroken(false);
+              onChange(e.target.value);
+            }}
+          />
+        ) : null}
+      </div>
+    </FieldShell>
+  );
+}
+
+function move<T>(list: T[], from: number, to: number) {  const next = [...list];
   const [item] = next.splice(from, 1);
   next.splice(to, 0, item);
   return next;

@@ -237,6 +237,18 @@ const SCHEMA_SQL = `
     value      TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  /* Images uploaded from the admin console. Kept in the database so they
+     survive a redeploy on hosts with an ephemeral filesystem (Render). */
+  CREATE TABLE IF NOT EXISTS media (
+    id          TEXT PRIMARY KEY,
+    filename    TEXT NOT NULL,
+    mime_type   TEXT NOT NULL,
+    bytes       INTEGER NOT NULL,
+    data        BLOB NOT NULL,
+    uploaded_by TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `;
 
 const INDEX_SQL = `

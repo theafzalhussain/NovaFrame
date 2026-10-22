@@ -271,6 +271,76 @@ app.get("/api/content/:collection", async (req, res) => {
   ok(res, await publishedCollection(name));
 });
 
+/* ------------------------------------------------------------------ */
+/* Media library — images uploaded from the admin console             */
+/* ------------------------------------------------------------------ */
+/** Upload formats we accept, mapped to the extension used in the stored id. */
+const MEDIA_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+  "image/gif": "gif",
+};
+const MEDIA_MAX_BYTES = 4 * 1024 * 1024;
+const MEDIA_ID_RE = /^[a-z0-9][a-z0-9-]{0,80}\.(jpg|png|webp|avif|gif)$/;
+
+/** Magic-byte check so a renamed .exe can't be stored as an image. */
+function sniffImage(buf: Buffer, mime: string) {
+  if (buf.length < 12) return false;
+  switch (mime) {
+    case "image/jpeg":
+      return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+    case "image/png":
+      return buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    case "image/gif":
+      return buf.subarray(0, 6).toString("latin1").startsWith("GIF8");
+    case "image/webp":
+      return buf.subarray(0, 4).toString("latin1") === "RIFF" && buf.subarray(8, 12).toString("latin1") === "WEBP";
+    case "image/avif":
+      return buf.subarray(4, 8).toString("latin1") === "ftyp";
+    default:
+      return false;
+  }
+}
+
+/** Public: serve an uploaded image. Ids carry a random suffix, so they cache forever. */
+const mediaCache = new Map<string, { mime: string; body: Buffer }>();
+let mediaCacheBytes = 0;
+const MEDIA_CACHE_MAX_BYTES = 24 * 1024 * 1024;
+
+function sendMedia(res: Response, mime: string, body: Buffer) {
+  res.setHeader("Content-Type", mime);
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  // Defensive: these bytes are user-supplied, so never let them run as a document.
+  res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; sandbox");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.send(body);
+}
+
+app.get("/api/media/:id", async (req, res) => {
+  const id = String(req.params.id).toLowerCase();
+  if (!MEDIA_ID_RE.test(id)) return fail(res, 404, "Image not found.");
+  // Images are immutable, so a small in-process cache saves a database read per view.
+  const cached = mediaCache.get(id);
+  if (cached) return sendMedia(res, cached.mime, cached.body);
+
+  const row = await get<{ mime_type: string; data: Buffer | Uint8Array | ArrayBuffer }>(
+    "SELECT mime_type, data FROM media WHERE id = ?",
+    [id],
+  );
+  if (!row) return fail(res, 404, "Image not found.");
+  const body = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data as ArrayBuffer);
+  while (mediaCacheBytes + body.length > MEDIA_CACHE_MAX_BYTES && mediaCache.size) {
+    const oldest = mediaCache.keys().next().value as string;
+    mediaCacheBytes -= mediaCache.get(oldest)?.body.length ?? 0;
+    mediaCache.delete(oldest);
+  }
+  mediaCache.set(id, { mime: row.mime_type, body });
+  mediaCacheBytes += body.length;
+  sendMedia(res, row.mime_type, body);
+});
+
 function insertEnquiry(args: Args) {
   return run(
     `INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline,
@@ -1283,6 +1353,66 @@ app.post("/api/admin/content/:collection/reset", adminOnly, async (req: AuthedRe
   await seedCollection(name);
   await audit(req, "CONTENT_RESET", name, "Restored shipped defaults");
   ok(res, (await contentQ.listAll(name)).map(parseRow));
+});
+
+/* ------------------------------------------------------------------ */
+/* Admin — media uploads                                              */
+/* ------------------------------------------------------------------ */
+const uploadLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 120, message: "Too many uploads — please wait a few minutes." });
+
+/**
+ * Raw image bytes in the request body (Content-Type is the image type).
+ * The browser downscales and re-encodes before sending, so payloads stay small.
+ */
+app.post(
+  "/api/admin/media",
+  anyAdmin,
+  uploadLimiter,
+  express.raw({ type: Object.keys(MEDIA_TYPES), limit: MEDIA_MAX_BYTES }),
+  async (req: AuthedRequest, res) => {
+    const mime = String(req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+    const ext = MEDIA_TYPES[mime];
+    if (!ext) return fail(res, 415, "Please upload a JPG, PNG, WebP, AVIF or GIF image.");
+    const buf = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!buf?.length) return fail(res, 422, "The upload was empty — please choose the file again.");
+    if (buf.length > MEDIA_MAX_BYTES) return fail(res, 413, "Images must be 4 MB or smaller.");
+    if (!sniffImage(buf, mime)) return fail(res, 415, "That file doesn't look like a real image.");
+
+    const original = str(req.query.name, 120) || `image.${ext}`;
+    const base = slugify(original.replace(/\.[a-z0-9]+$/i, "")).slice(0, 64) || "image";
+    const id = `${base}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+    await run("INSERT INTO media (id, filename, mime_type, bytes, data, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)", [
+      id,
+      original,
+      mime,
+      buf.length,
+      new Uint8Array(buf),
+      req.admin!.email,
+    ]);
+    await audit(req, "MEDIA_UPLOADED", `MEDIA_${id}`, `${mime} · ${Math.round(buf.length / 1024)} kB`);
+    // `path` is relative to the API base so the client can build the right URL.
+    ok(res, { id, path: `/media/${id}`, bytes: buf.length, mimeType: mime }, 201);
+  },
+);
+
+app.get("/api/admin/media", anyAdmin, async (_req, res) => {
+  ok(
+    res,
+    (await all<{ id: string; filename: string; mimeType: string; bytes: number; createdAt: string }>(
+      "SELECT id, filename, mime_type AS mimeType, bytes, created_at AS createdAt FROM media ORDER BY created_at DESC LIMIT 200",
+    )).map((row) => ({ ...row, path: `/media/${row.id}` })),
+  );
+});
+
+app.delete("/api/admin/media/:id", adminOnly, async (req: AuthedRequest, res) => {
+  const id = String(req.params.id).toLowerCase();
+  if (!MEDIA_ID_RE.test(id)) return fail(res, 404, "Image not found.");
+  const info = await run("DELETE FROM media WHERE id = ?", [id]);
+  if (!info.changes) return fail(res, 404, "Image not found.");
+  mediaCacheBytes -= mediaCache.get(id)?.body.length ?? 0;
+  mediaCache.delete(id);
+  await audit(req, "MEDIA_DELETED", `MEDIA_${id}`);
+  ok(res);
 });
 
 /* ------------------------------------------------------------------ */
