@@ -94,37 +94,66 @@ export default function About() {
 
       {/* Founder */}
       {founder ? (
-        <section className="py-24 md:py-32">
+        <section className="relative py-24 md:py-32">
           <div className="shell grid items-start gap-14 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
             <Reveal>
               <div className="relative mx-auto w-full max-w-[420px] lg:sticky lg:top-32">
-                <div className="gold-edge relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850">
+                {/* soft glow behind the portrait */}
+                <div aria-hidden className="pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
+                <figure className="gold-edge group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
                   {founder.photo ? (
-                    <img src={founder.photo} alt={`${founder.name}, ${founder.role}`} className="h-full w-full object-cover object-[50%_30%]" loading="lazy" />
+                    <img
+                      src={founder.photo}
+                      alt={`${founder.name}, ${founder.role}`}
+                      className="h-full w-full object-cover object-[50%_22%] transition duration-700 group-hover:scale-[1.03]"
+                      loading="lazy"
+                    />
                   ) : (
                     <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-ink-950/90 to-transparent" />
-                  <div className="absolute bottom-5 left-5 flex flex-wrap gap-2">
-                    {founder.links.map((l) => (
-                      <a
-                        key={l.label}
-                        href={l.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={l.label}
-                        className="lux-glass grid h-10 w-10 place-items-center rounded-full text-parchment transition hover:text-gold-200"
-                      >
-                        <Icon name={l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase()} className="h-4 w-4" />
-                      </a>
-                    ))}
-                  </div>
-                </div>
+                  {/* readability gradient */}
+                  <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
+                  {/* name plate */}
+                  <figcaption className="absolute inset-x-5 bottom-5">
+                    <p className="display text-[1.55rem] leading-none text-ivory">{founder.name}</p>
+                    <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">
+                      <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" />
+                      {founder.location ?? settings.city}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {founder.links.map((l) => (
+                        <a
+                          key={l.label}
+                          href={l.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={l.label}
+                          className="lux-glass grid h-10 w-10 place-items-center rounded-full text-parchment transition hover:scale-105 hover:text-gold-200"
+                        >
+                          <Icon name={l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase()} className="h-4 w-4" />
+                        </a>
+                      ))}
+                    </div>
+                  </figcaption>
+                </figure>
+                <Seal size={104} className="absolute -top-6 -right-6 hidden drop-shadow-lg sm:block" />
               </div>
             </Reveal>
             <div>
               <Reveal>
                 <SectionHeading align="left" index="01" eyebrow="Founder" title={founder.name} highlight={founder.role.split("·")[0]?.trim()} size="md" />
+              </Reveal>
+              <Reveal delay={60}>
+                <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3.5 py-1.5 text-[12px] font-medium text-emerald-200">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                    </span>
+                    Available for new projects
+                  </span>
+                  <span className="chip">{founder.focus}</span>
+                </div>
               </Reveal>
               <Reveal delay={80}>
                 <p className="mt-7 text-[16.5px] leading-[1.85] text-sand">{founder.bio}</p>
@@ -167,6 +196,16 @@ export default function About() {
                   </div>
                 </Reveal>
               ) : null}
+              <Reveal delay={240}>
+                <div className="mt-11 flex flex-wrap items-center gap-3">
+                  <Button to="/book" arrow track="founder_book">
+                    Book a call with {founder.name.split(" ")[0]}
+                  </Button>
+                  <Button to="/contact" variant="line">
+                    Send a message
+                  </Button>
+                </div>
+              </Reveal>
             </div>
           </div>
         </section>

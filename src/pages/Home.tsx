@@ -583,30 +583,51 @@ function FounderSection() {
       <div className="shell grid items-center gap-14 lg:grid-cols-[0.85fr_1.15fr] lg:gap-20">
         <Reveal>
           <div className="relative mx-auto w-full max-w-[420px]">
-            <div className="gold-edge relative aspect-[4/5] overflow-hidden rounded-t-[999px] rounded-b-[28px] bg-ink-850">
+            {/* soft glow behind the portrait */}
+            <div aria-hidden className="pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
+            <figure className="gold-edge group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
               {founder.photo ? (
-                <img src={founder.photo} alt={`${founder.name}, ${founder.role}`} className="h-full w-full object-cover object-[50%_30%]" loading="lazy" />
+                <img
+                  src={founder.photo}
+                  alt={`${founder.name}, ${founder.role}`}
+                  className="h-full w-full object-cover object-[50%_22%] transition duration-700 group-hover:scale-[1.03]"
+                  loading="lazy"
+                />
               ) : (
                 <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>
               )}
-              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-ink-950/90 to-transparent" />
-              <div className="absolute inset-x-6 bottom-6 flex items-end justify-between">
+              {/* readability gradient */}
+              <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
+              {/* name plate */}
+              <figcaption className="absolute inset-x-6 bottom-6 flex items-end justify-between gap-3">
                 <div>
-                  <p className="display text-[1.6rem] leading-none">{founder.name}</p>
-                  <p className="mt-1.5 text-[12.5px] text-gold-200">{founder.role}</p>
+                  <p className="display text-[1.6rem] leading-none text-ivory">{founder.name}</p>
+                  <p className="mt-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">{founder.role}</p>
                 </div>
-                <span className="chip">
+                <span className="chip shrink-0">
                   <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" /> {founder.location ?? settings.city}
                 </span>
-              </div>
-            </div>
-            <Seal size={128} className="absolute -top-6 -right-6 hidden sm:block" />
+              </figcaption>
+            </figure>
+            <Seal size={120} className="absolute -top-6 -right-6 hidden drop-shadow-lg sm:block" />
           </div>
         </Reveal>
 
         <div>
           <Reveal>
             <SectionHeading align="left" index="06" eyebrow="Meet the founder" title="The person who answers" highlight="is the person who builds." size="md" />
+          </Reveal>
+          <Reveal delay={60}>
+            <div className="mt-5 flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3.5 py-1.5 text-[12px] font-medium text-emerald-200">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                Available for new projects
+              </span>
+              {founder.focus ? <span className="chip">{founder.focus}</span> : null}
+            </div>
           </Reveal>
           <Reveal delay={90}>
             <p className="mt-7 text-[16px] leading-relaxed text-sand">{founder.bio}</p>
