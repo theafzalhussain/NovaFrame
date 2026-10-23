@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <linearGradient id="g" x1="10" y1="8" x2="90" y2="92" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#f6edd8"/>
-      <stop offset="0.45" stop-color="#d4ad66"/>
-      <stop offset="1" stop-color="#9c7134"/>
-    </linearGradient>
-  </defs>
-  <rect width="100" height="100" rx="24" fill="#0d0c0a"/>
-  <rect x="8.5" y="8.5" width="83" height="83" rx="19" fill="none" stroke="url(#g)" stroke-width="3"/>
-  <path fill="url(#g)" d="M24 34.5 32.5 43V78H24Z"/>
-  <path fill="url(#g)" d="M24 22h8.6L76 66.3V78h-6.6L24 31.6Z"/>
-  <path fill="url(#g)" d="M67.5 22H76v42.4l-8.5-8.6Z"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="10" x2="90" y1="8" y2="92" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f6edd8"/><stop offset=".45" stop-color="#d4ad66"/><stop offset="1" stop-color="#9c7134"/></linearGradient></defs><rect width="100" height="100" fill="#0d0c0a" rx="24"/><rect width="83" height="83" x="8.5" y="8.5" fill="none" stroke="url(#g)" stroke-width="3" rx="19"/><path fill="url(#g)" d="M24 34.5 32.5 43V78H24Z"/><path fill="url(#g)" d="M24 22h8.6L76 66.3V78h-6.6L24 31.6Z"/><path fill="url(#g)" d="M67.5 22H76v42.4l-8.5-8.6Z"/></svg>
