@@ -4,20 +4,178 @@ import { Button, Diamond, IconTile, PageHero, Reveal, SectionHeading } from "../
 import type { TeamMember } from "../data/types";
 import { useContent } from "../lib/content";
 
-function MemberCard({ member }: { member: TeamMember }) {
+type Fact = { label: string; value: string; icon: string; href?: string; external?: boolean };
+
+/** Compact, real-data fact sheet shown under a portrait. */
+function FactList({ facts, className = "" }: { facts: Fact[]; className?: string }) {
+  if (!facts.length) return null;
   return (
-    <article className="lux-card lux-hover group overflow-hidden">
-      <div className="relative aspect-[4/3] overflow-hidden border-b border-gold-300/10 bg-ink-850">
-        {member.photo ? (
-          <img src={member.photo} alt={member.name} className="h-full w-full object-cover object-[50%_30%] transition duration-700 group-hover:scale-105" loading="lazy" />
-        ) : (
-          <div className="display text-gold grid h-full place-items-center text-[4rem]">{member.initials}</div>
-        )}
-      </div>
-      <div className="p-6">
-        <p className="display text-[1.5rem]">{member.name}</p>
-        <p className="mt-1 text-[13px] text-gold-300">{member.role}</p>
-        <p className="mt-3 text-[14px] leading-relaxed text-mist">{member.focus}</p>
+    <dl className={`lux-inset divide-y divide-gold-300/[0.08] rounded-2xl ${className}`}>
+      {facts.map((f) => (
+        <div key={f.label} className="flex items-start gap-3.5 px-4 py-3.5">
+          <Icon name={f.icon} className="mt-0.5 h-4 w-4 shrink-0 text-gold-300" />
+          <div className="min-w-0">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.22em] text-smoke">{f.label}</dt>
+            <dd className="mt-1 break-words text-[13.5px] font-medium text-parchment">
+              {f.href ? (
+                <a href={f.href} {...(f.external ? { target: "_blank", rel: "noopener noreferrer" } : {})} className="transition hover:text-gold-200">
+                  {f.value}
+                </a>
+              ) : (
+                f.value
+              )}
+            </dd>
+          </div>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+const prettyUrl = (href: string) => href.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, "");
+
+/** Full profile card for a team member. Renders only the fields that have real data. */
+function TeamProfile({ member, index }: { member: TeamMember; index: number }) {
+  const first = member.name.trim().split(/\s+/)[0] || member.name;
+  const groups = (member.skillGroups ?? []).filter((g) => g.label && Array.isArray(g.items) && g.items.length > 0);
+  const flatSkills = (member.skills ?? []).filter(Boolean);
+  const services = (member.services ?? []).filter(Boolean);
+  const links = (member.links ?? []).filter((l) => l.href);
+  const credentials = (member.credentials ?? []).filter((c) => c.title);
+  const email = member.email?.trim();
+  const github = links.find((l) => l.label.toLowerCase() === "github");
+
+  // Quick facts shown under the photo — only rows that have real data.
+  const facts: Fact[] = [
+    { label: "Role", value: member.role, icon: "briefcase" },
+    ...(member.focus ? [{ label: "Focus", value: member.focus, icon: "target" }] : []),
+    ...(member.location ? [{ label: "Based in", value: member.location, icon: "map-pin" }] : []),
+    ...(email ? [{ label: "Email", value: email, icon: "mail", href: `mailto:${email}` }] : []),
+    ...(github ? [{ label: "GitHub", value: prettyUrl(github.href), icon: "github", href: github.href, external: true }] : []),
+  ].filter((f) => f.value);
+
+  return (
+    <article className="lux-card overflow-hidden">
+      <div className="grid lg:grid-cols-[0.78fr_1.22fr]">
+        {/* Portrait — uncropped photo, bold gold border, hover zoom (CSS transition only, no keyframes) */}
+        <div className="p-5 sm:p-6 lg:p-7">
+          <figure className="group overflow-hidden rounded-[22px] border-[3px] border-gold-300/55 bg-ink-850 shadow-xl shadow-black/40 ring-4 ring-gold-300/10">
+            {member.photo ? (
+              <img
+                src={member.photo}
+                alt={`${member.name}, ${member.role}`}
+                className="block aspect-[15/16] w-full object-cover object-top transition duration-700 group-hover:scale-[1.03]"
+                loading="lazy"
+                decoding="async"
+              />
+            ) : (
+              <div className="display text-gold grid aspect-[15/16] w-full place-items-center text-[6rem]">{member.initials}</div>
+            )}
+          </figure>
+
+          <FactList facts={facts} className="mt-5" />
+        </div>
+
+        {/* Details */}
+        <div className="flex flex-col p-6 sm:p-8 lg:p-11">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-mono text-[11px] tracking-[0.24em] text-gold-300">{String(index + 2).padStart(2, "0")}</span>
+            <span aria-hidden className="h-px w-8 bg-gold-400/50" />
+            <span className="chip">{member.role}</span>
+          </div>
+
+          <h3 className="display mt-5 text-[2.3rem] leading-[1.02] md:text-[3rem]">{member.name}</h3>
+          {member.headline ? <p className="display serif-accent mt-3 text-[1.2rem] leading-snug text-gold-100 md:text-[1.4rem]">{member.headline}</p> : null}
+
+          {member.bio ? <p className="mt-6 text-[15.5px] leading-[1.85] text-sand">{member.bio}</p> : null}
+
+          {services.length ? (
+            <div className="mt-9">
+              <p className="label">What {first} does</p>
+              <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
+                {services.map((s) => (
+                  <li key={s} className="lux-inset flex items-center gap-3 rounded-xl px-4 py-3">
+                    <Icon name="check-circle" className="h-4 w-4 shrink-0 text-gold-300" />
+                    <span className="text-[13.5px] font-medium text-parchment">{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {groups.length ? (
+            <div className="mt-9">
+              <p className="label">Technical skills</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {groups.map((g) => (
+                  <div key={g.label} className="lux-inset rounded-2xl p-4">
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.22em] text-gold-300">{g.label}</p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {g.items.map((item) => (
+                        <span key={item} className="chip">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : flatSkills.length ? (
+            <div className="mt-9">
+              <p className="label">Skills</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {flatSkills.map((s) => (
+                  <span key={s} className="chip">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {credentials.length ? (
+            <div className="mt-9">
+              <p className="label">Education & training</p>
+              <ul className="mt-4 divide-y divide-gold-300/[0.08] rounded-2xl border border-gold-300/10">
+                {credentials.map((c) => (
+                  <li key={c.title} className="flex items-center gap-4 px-5 py-3.5">
+                    <Icon name="award" className="h-5 w-5 shrink-0 text-gold-300" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-semibold text-parchment">{c.title}</span>
+                      {c.org ? <span className="block text-[12.5px] text-smoke">{c.org}</span> : null}
+                    </span>
+                    {c.year ? <span className="chip shrink-0">{c.year}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {member.goal || member.quote ? (
+            <blockquote className="mt-9 border-l border-gold-400/60 pl-6">
+              <p className="label">{member.goal ? "Goal" : "In their words"}</p>
+              <p className="display serif-accent mt-2.5 text-[1.25rem] leading-snug text-gold-100">{member.goal ?? `“${member.quote}”`}</p>
+            </blockquote>
+          ) : null}
+
+          {email || links.length ? (
+            <div className="mt-auto pt-10">
+              <div className="flex flex-wrap items-center gap-3 border-t border-gold-300/10 pt-7">
+                {email ? (
+                  <Button href={`mailto:${email}`} icon="mail" track={`team_email_${member.id}`}>
+                    Email {first}
+                  </Button>
+                ) : null}
+                {github ? (
+                  <Button href={github.href} variant="line" icon="github" track={`team_github_${member.id}`}>
+                    GitHub
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -97,10 +255,10 @@ export default function About() {
         <section className="relative py-24 md:py-32">
           <div className="shell grid items-start gap-14 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
             <Reveal>
-              <div className="relative mx-auto w-full max-w-[420px] lg:sticky lg:top-32">
+              <div className="relative mx-auto w-full max-w-[460px] lg:self-start">
                 {/* soft glow behind the portrait */}
-                <div aria-hidden className="pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
-                <figure className="gold-edge group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
+                <div aria-hidden className="portrait-glow pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
+                <figure className="portrait-frame group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
                   {founder.photo ? (
                     <img
                       src={founder.photo}
@@ -112,9 +270,9 @@ export default function About() {
                     <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>
                   )}
                   {/* readability gradient */}
-                  <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 z-[4] h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
                   {/* name plate */}
-                  <figcaption className="absolute inset-x-5 bottom-5">
+                  <figcaption className="absolute inset-x-5 bottom-5 z-[5]">
                     <p className="display text-[1.55rem] leading-none text-ivory">{founder.name}</p>
                     <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">
                       <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" />
@@ -137,6 +295,18 @@ export default function About() {
                   </figcaption>
                 </figure>
                 <Seal size={104} className="absolute -top-6 -right-6 hidden drop-shadow-lg sm:block" />
+                <FactList
+                  className="mt-6"
+                  facts={[
+                    { label: "Role", value: founder.role, icon: "briefcase" },
+                    ...(founder.focus ? [{ label: "Focus", value: founder.focus, icon: "target" }] : []),
+                    ...(founder.location ? [{ label: "Based in", value: founder.location, icon: "map-pin" }] : []),
+                    { label: "Studio", value: `${settings.name}${settings.founded ? ` · Founded ${settings.founded}` : ""}`, icon: "layers" },
+                    ...founder.links
+                      .filter((l) => l.href)
+                      .map((l) => ({ label: l.label, value: prettyUrl(l.href), icon: l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase(), href: l.href, external: true })),
+                  ]}
+                />
               </div>
             </Reveal>
             <div>
@@ -212,15 +382,22 @@ export default function About() {
       ) : null}
 
       {others.length ? (
-        <section className="pb-24">
+        <section className="relative border-t border-gold-300/[0.07] py-24 md:py-32">
           <div className="shell">
             <Reveal>
-              <SectionHeading align="left" eyebrow="The team" title="The people" highlight="behind the work." size="md" />
+              <SectionHeading
+                align="left"
+                eyebrow="The team"
+                title="The people"
+                highlight="behind the work."
+                description="Specialists join an engagement under the same contract and NDA — and you know exactly who they are before they start."
+                size="md"
+              />
             </Reveal>
-            <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-12 space-y-8 md:space-y-10">
               {others.map((m, i) => (
-                <Reveal key={m.id} delay={i * 80}>
-                  <MemberCard member={m} />
+                <Reveal key={m.id} delay={80}>
+                  <TeamProfile member={m} index={i} />
                 </Reveal>
               ))}
             </div>

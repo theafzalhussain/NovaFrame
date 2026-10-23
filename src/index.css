@@ -1102,7 +1102,51 @@
     border-top-color: #e3c88c;
     animation: spin 0.8s linear infinite;
   }
+
+  /* ---------- Founder portrait ---------- */
+  /* Ambient glow that softly breathes behind the founder photo. */
+  .portrait-glow {
+    animation: portrait-breathe 7s ease-in-out infinite;
+  }
+  /* The framed photo: gentle float + a one-pass gold light sweep when revealed. */
+  .portrait-frame {
+    animation: portrait-float 9s ease-in-out infinite;
+    isolation: isolate;
+    will-change: transform;
+  }
+  .portrait-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 38%, rgba(246, 237, 216, 0.28) 48%, rgba(227, 200, 140, 0.12) 54%, transparent 64%);
+    background-size: 280% 100%;
+    background-position: 180% 0;
+    mix-blend-mode: screen;
+  }
+  /* Run the sweep once, only after the section has revealed into view. */
+  .reveal-in .portrait-frame::before {
+    animation: portrait-sweep 1.7s var(--ease) 0.25s 1 both;
+  }
+  /* Thin rotating conic ring that reads as a premium, "engineered" frame. */
+  .portrait-frame::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: 2;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(from var(--angle, 0deg), transparent 0deg, rgba(227, 200, 140, 0.55) 40deg, transparent 130deg, transparent 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: border-spin 9s linear infinite;
+    pointer-events: none;
+  }
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Keyframes                                                          */
@@ -1240,6 +1284,34 @@
     stroke-dashoffset: 0;
   }
 }
+@keyframes portrait-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+@keyframes portrait-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.06);
+  }
+}
+@keyframes portrait-sweep {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Phones, tablets and touch screens: same look, a fraction of the    */
@@ -1258,6 +1330,11 @@
   }
   .text-gold-shine,
   .gold-orbit::after {
+    animation: none;
+  }
+  .portrait-frame,
+  .portrait-glow,
+  .portrait-frame::after {
     animation: none;
   }
   .lux-glass {
@@ -1298,7 +1375,11 @@
 .reveal:not(.reveal-in) .gold-orbit::after,
 [data-offscreen] .gold-orbit::after,
 .reveal:not(.reveal-in) .text-gold-shine,
-[data-offscreen] .text-gold-shine {
+[data-offscreen] .text-gold-shine,
+[data-offscreen] .portrait-frame,
+[data-offscreen] .portrait-glow,
+.reveal:not(.reveal-in) .portrait-frame,
+.reveal:not(.reveal-in) .portrait-glow {
   animation: none;
 }
 
@@ -1317,6 +1398,12 @@
   .rotator > span,
   .shot {
     transition: none;
+  }
+  .portrait-frame,
+  .portrait-glow,
+  .portrait-frame::before,
+  .portrait-frame::after {
+    animation: none;
   }
   .nf-glow,
   .nf-grain,

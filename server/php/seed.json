@@ -1312,6 +1312,182 @@
             "href": "https://www.afzalhussain.tech/"
           }
         ]
+      },
+      {
+        "id": "vijay",
+        "name": "Vijay Kumar",
+        "role": "PHP Laravel Developer",
+        "initials": "VK",
+        "photo": "/team/vijay.jpg",
+        "focus": "Laravel web applications, REST APIs and database-driven systems",
+        "headline": "Building modern, scalable and user-friendly web applications",
+        "bio": "Vijay is a PHP Laravel developer with hands-on experience in web development. He specialises in building responsive websites, dynamic web applications, REST APIs and database-driven systems using modern web technologies.",
+        "goal": "To build secure, efficient and scalable web solutions that help businesses grow online.",
+        "email": "vijayykumar785@gmail.com",
+        "skills": [
+          "PHP",
+          "Laravel",
+          "HTML5",
+          "CSS3",
+          "JavaScript",
+          "Bootstrap",
+          "React",
+          "MySQL",
+          "Git",
+          "GitHub",
+          "VS Code"
+        ],
+        "skillGroups": [
+          {
+            "label": "Backend",
+            "items": [
+              "PHP",
+              "Laravel"
+            ]
+          },
+          {
+            "label": "Frontend",
+            "items": [
+              "HTML5",
+              "CSS3",
+              "JavaScript",
+              "Bootstrap",
+              "React"
+            ]
+          },
+          {
+            "label": "Database",
+            "items": [
+              "MySQL"
+            ]
+          },
+          {
+            "label": "Tools",
+            "items": [
+              "Git",
+              "GitHub",
+              "VS Code"
+            ]
+          }
+        ],
+        "services": [
+          "Custom website development",
+          "Laravel web applications",
+          "REST API development",
+          "Admin panels & CRUD systems",
+          "Database design & integration",
+          "Responsive UI development"
+        ],
+        "links": [
+          {
+            "label": "GitHub",
+            "href": "https://github.com/codewithrishee"
+          }
+        ]
+      },
+      {
+        "id": "om-gupta",
+        "name": "Om Gupta",
+        "role": "Lead Generation Specialist & Web Developer",
+        "initials": "OG",
+        "photo": "/team/om-gupta.jpg",
+        "location": "Delhi-NCR, India",
+        "focus": "Responsive front-end development with HTML, CSS, JavaScript and WordPress",
+        "headline": "Building responsive, user-friendly websites that stand out",
+        "bio": "Om is a web developer with hands-on experience building responsive, user-friendly websites using HTML, CSS, JavaScript and WordPress. Through a 6-month web development training he built multiple projects focused on modern, interactive and mobile-friendly design, and he enjoys solving problems and turning ideas into functional websites.",
+        "goal": "To contribute to real-world projects, collaborate with dynamic teams and grow into a versatile developer who delivers impactful digital experiences.",
+        "email": "omgupta9592@gmail.com",
+        "skills": [
+          "HTML5",
+          "CSS3",
+          "JavaScript",
+          "Bootstrap",
+          "PHP",
+          "MySQL",
+          "WordPress",
+          "GitHub",
+          "Netlify"
+        ],
+        "skillGroups": [
+          {
+            "label": "Frontend",
+            "items": [
+              "HTML5",
+              "CSS3",
+              "JavaScript",
+              "Bootstrap"
+            ]
+          },
+          {
+            "label": "Backend & Database",
+            "items": [
+              "PHP",
+              "MySQL"
+            ]
+          },
+          {
+            "label": "CMS",
+            "items": [
+              "WordPress"
+            ]
+          },
+          {
+            "label": "Tools & Hosting",
+            "items": [
+              "GitHub",
+              "Netlify"
+            ]
+          }
+        ],
+        "services": [
+          "Responsive website development",
+          "Front-end development (HTML, CSS, JavaScript)",
+          "Bootstrap & mobile-first UI",
+          "WordPress websites",
+          "PHP & MySQL integration",
+          "Deployment on Netlify & GitHub Pages"
+        ],
+        "credentials": [
+          {
+            "title": "Web Development Course",
+            "org": "World Class Skill Centre (WCSC)",
+            "year": "2025"
+          },
+          {
+            "title": "Diploma — Computer Operator & Programming Assistant (COPA)",
+            "org": "",
+            "year": "2024"
+          },
+          {
+            "title": "12th (CBSE)",
+            "org": "Sarvodaya Bal Vidyalaya",
+            "year": "2023"
+          },
+          {
+            "title": "BA — Political Science",
+            "org": "Delhi University",
+            "year": "2023 – 2026"
+          },
+          {
+            "title": "Certified: AI-Powered People Manager",
+            "org": "",
+            "year": ""
+          }
+        ],
+        "links": [
+          {
+            "label": "GitHub",
+            "href": "https://github.com/Om9592"
+          },
+          {
+            "label": "LinkedIn",
+            "href": "https://www.linkedin.com/in/om-gupta-5b8361304/"
+          },
+          {
+            "label": "Portfolio",
+            "href": "https://om-portfoli.netlify.app/"
+          }
+        ]
       }
     ],
     "testimonials": [],

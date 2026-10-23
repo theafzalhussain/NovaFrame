@@ -584,8 +584,8 @@ function FounderSection() {
         <Reveal>
           <div className="relative mx-auto w-full max-w-[420px]">
             {/* soft glow behind the portrait */}
-            <div aria-hidden className="pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
-            <figure className="gold-edge group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
+            <div aria-hidden className="portrait-glow pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
+            <figure className="portrait-frame group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
               {founder.photo ? (
                 <img
                   src={founder.photo}
@@ -597,9 +597,9 @@ function FounderSection() {
                 <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>
               )}
               {/* readability gradient */}
-              <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 z-[4] h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
               {/* name plate */}
-              <figcaption className="absolute inset-x-6 bottom-6 flex items-end justify-between gap-3">
+              <figcaption className="absolute inset-x-6 bottom-6 z-[5] flex items-end justify-between gap-3">
                 <div>
                   <p className="display text-[1.6rem] leading-none text-ivory">{founder.name}</p>
                   <p className="mt-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">{founder.role}</p>

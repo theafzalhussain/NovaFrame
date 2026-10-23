@@ -176,9 +176,20 @@ export type TeamMember = {
   photo?: string;
   location?: string;
   focus: string;
+  /** One-line positioning statement shown under the name */
+  headline?: string;
   bio: string;
   quote?: string;
+  /** Flat skill list (used when `skillGroups` is empty) */
   skills: string[];
+  /** Skills grouped by area, e.g. Backend / Frontend / Database / Tools */
+  skillGroups?: { label: string; items: string[] }[];
+  /** "What I do" — services this person delivers */
+  services?: string[];
+  /** Mission statement */
+  goal?: string;
+  /** Public contact email */
+  email?: string;
   credentials?: Credential[];
   links: { label: string; href: string }[];
 };
