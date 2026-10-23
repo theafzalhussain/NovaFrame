@@ -182,6 +182,51 @@ function seed_collection(string $name): void
     }
     $pdo->commit();
 }
+/**
+ * Default entries that must reach databases which are ALREADY populated (seeding only runs on an
+ * empty collection). Each id is offered once per database: inserted only if missing, appended after
+ * the existing entries and never touched again — so admin edits survive and deletions stay deleted.
+ * Mirror of DEFAULT_TOP_UPS in server/db.ts; keep both lists in sync.
+ */
+const DEFAULT_TOP_UPS = ['team' => ['vijay', 'om-gupta']];
+function top_up_defaults(): void
+{
+    $offered = read_setting('seeded_items');
+    $offered = is_array($offered) ? $offered : [];
+    $changed = false;
+    foreach (DEFAULT_TOP_UPS as $name => $ids) {
+        $done = array_values(array_unique($offered[$name] ?? []));
+        $defaults = seed()['collections'][$name] ?? [];
+        foreach ($ids as $id) {
+            if (in_array($id, $done, true)) {
+                continue;
+            }
+            $item = null;
+            foreach ($defaults as $d) {
+                if (($d['id'] ?? null) === $id) {
+                    $item = $d;
+                    break;
+                }
+            }
+            if ($item === null) {
+                continue;
+            }
+            $exists = one('SELECT 1 AS x FROM content WHERE collection = ? AND id = ?', [$name, $id]);
+            if (!$exists) {
+                $max = (int) (one('SELECT COALESCE(MAX(sort_order), 0) AS m FROM content WHERE collection = ?', [$name])['m'] ?? 0);
+                q('INSERT IGNORE INTO content (collection, id, data, sort_order, published) VALUES (?, ?, ?, ?, 1)', [
+                    $name, $id, json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $max + 10,
+                ]);
+            }
+            $done[] = $id;
+            $offered[$name] = $done;
+            $changed = true;
+        }
+    }
+    if ($changed) {
+        write_setting('seeded_items', $offered);
+    }
+}
 function ensure_seeded(): void
 {
     $seeded = read_setting('seeded_collections');
@@ -201,6 +246,7 @@ function ensure_seeded(): void
     if ($changed) {
         write_setting('seeded_collections', $seeded);
     }
+    top_up_defaults();
     if (read_setting('site') === null) {
         write_setting('site', seed()['settings'] ?? []);
     }

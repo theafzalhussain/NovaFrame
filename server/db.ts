@@ -428,6 +428,61 @@ export async function seedCollection(name: CollectionName): Promise<void> {
 /* Initialisation — schema, migrations, first-run seeding             */
 /* Must be awaited before the API serves requests or a CLI uses db.   */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Default entries that must reach databases which are ALREADY populated.
+ * (Seeding above only runs on an empty collection, so a new default would
+ * never appear on a live site.) Each id is offered exactly once per
+ * database: it is inserted only if missing, appended after the existing
+ * entries, and never touched again — so admin edits survive every deploy,
+ * and an entry deleted in the admin stays deleted.
+ *
+ * To ship another default team member: add it to `team` in src/data/content.ts
+ * and append its id here.
+ */
+export const DEFAULT_TOP_UPS: Partial<Record<CollectionName, string[]>> = {
+  team: ["vijay", "om-gupta"],
+};
+
+export async function topUpDefaults(): Promise<string[]> {
+  const row = await get<{ value: string }>("SELECT value FROM settings WHERE key = ?", ["seeded_items"]);
+  const offered: Record<string, string[]> = row ? (JSON.parse(row.value) as Record<string, string[]>) : {};
+  const added: string[] = [];
+  let changed = false;
+
+  for (const [name, ids] of Object.entries(DEFAULT_TOP_UPS) as [CollectionName, string[]][]) {
+    const done = new Set(offered[name] ?? []);
+    const defaults = defaultContent.collections[name] as unknown as { id: string }[];
+    for (const id of ids) {
+      if (done.has(id)) continue;
+      const item = defaults.find((d) => d.id === id);
+      if (!item) continue;
+      const exists = await get<{ x: number }>("SELECT 1 AS x FROM content WHERE collection = ? AND id = ?", [name, id]);
+      if (!exists) {
+        const top = await get<{ m: number }>("SELECT COALESCE(MAX(sort_order), 0) AS m FROM content WHERE collection = ?", [name]);
+        await run("INSERT OR IGNORE INTO content (collection, id, data, sort_order, published) VALUES (?, ?, ?, ?, 1)", [
+          name,
+          id,
+          JSON.stringify(item),
+          Number(top?.m ?? 0) + 10,
+        ]);
+        added.push(`${name}/${id}`);
+      }
+      done.add(id);
+      offered[name] = [...done];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await run(
+      `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      ["seeded_items", JSON.stringify(offered)],
+    );
+  }
+  return added;
+}
 let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
 export async function initDb(): Promise<void> {
@@ -491,6 +546,7 @@ export async function initDb(): Promise<void> {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
     ["seeded_collections", JSON.stringify([...seeded])],
   );
+  await topUpDefaults();
   if (!(await readSetting("site"))) await writeSetting("site", defaultContent.settings);
   if (!(await readSetting("advanced"))) await writeSetting("advanced", defaultContent.advanced);
 
