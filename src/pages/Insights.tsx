@@ -26,6 +26,7 @@ export function InsightsPage() {
   const categories = ["All", ...Array.from(new Set(articles.map((a) => a.category)))];
   const visible = category === "All" ? articles : articles.filter((a) => a.category === category);
   const [lead, ...rest] = visible;
+  const leadAuthor = lead ? collections.team.find((t) => t.name === lead.author) ?? collections.team[0] : undefined;
 
   return (
     <>
@@ -66,12 +67,39 @@ export function InsightsPage() {
                     Read the article <Icon name="arrow" className="h-3.5 w-3.5" />
                   </span>
                 </div>
-                <div className="relative hidden overflow-hidden border-l border-gold-300/10 bg-ink-850 md:block">
-                  <div className="grid-lines absolute inset-0" aria-hidden />
-                  <div className="absolute inset-0 grid place-items-center">
-                    <span className="display serif-accent text-gold text-[9rem] leading-none opacity-80">“</span>
+                <div className="relative hidden overflow-hidden border-l border-gold-300/10 bg-ink-850 md:flex md:flex-col md:justify-between md:p-10">
+                  <div className="grid-lines absolute inset-0 opacity-50" aria-hidden />
+                  <div className="pointer-events-none absolute -top-16 -right-10 h-56 w-56 rounded-full bg-gold-400/10 blur-3xl" aria-hidden />
+                  <div className="relative flex items-center justify-between">
+                    <span className="label">Featured read</span>
+                    <span className="chip">
+                      <Icon name="star" className="h-3.5 w-3.5 text-gold-300" /> Editor's pick
+                    </span>
                   </div>
-                  <span className="label absolute bottom-6 left-6">By {lead.author}</span>
+                  <div className="relative">
+                    <Icon name="quote" className="h-9 w-9 text-gold-400/70" />
+                    <p className="display serif-accent mt-5 text-[1.5rem] leading-snug text-gold-100">
+                      Engineering notes, written by the person who shipped the code.
+                    </p>
+                  </div>
+                  <div className="relative flex items-center gap-3.5 border-t border-gold-300/10 pt-6">
+                    {leadAuthor?.photo ? (
+                      <img
+                        src={leadAuthor.photo}
+                        alt={lead.author}
+                        className="h-12 w-12 rounded-full border border-gold-300/30 object-cover object-top"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="grid h-12 w-12 place-items-center rounded-full border border-gold-300/30 bg-ink-900 text-gold">
+                        <Icon name="user" className="h-5 w-5" />
+                      </span>
+                    )}
+                    <div>
+                      <p className="text-[14px] font-semibold text-ivory">{lead.author}</p>
+                      <p className="text-[12.5px] text-mist">{leadAuthor?.role ?? "Founder · Lead Engineer"}</p>
+                    </div>
+                  </div>
                 </div>
               </Link>
             </Reveal>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import ProjectCard from "../components/ProjectCard";
+import { Icon } from "../components/Icons";
 import { Button, PageHero, Reveal, SectionHeading } from "../components/ui";
 import { useContent } from "../lib/content";
 import { usePauseOffscreen } from "../lib/onscreen";
@@ -25,18 +26,32 @@ export default function Portfolio() {
         highlight="measured results."
         description="Every project here is running in production or open source — click through to the live site, read the repository, or open the case study for the architecture and trade-offs."
         aside={
-          <div className="lux-card grid grid-cols-2 gap-px overflow-hidden bg-gold-300/10 p-0">
-            {[
-              [String(projects.length), "Products built"],
-              [String(live), "Live right now"],
-              [String(repos), "Public repositories"],
-              ["90+", "Lighthouse on shipped work"],
-            ].map(([v, l]) => (
-              <div key={l} className="bg-ink-900 p-6">
-                <div className="display text-gold text-[2.2rem] leading-none">{v}</div>
-                <div className="mt-2 text-[12px] text-mist">{l}</div>
-              </div>
-            ))}
+          <div className="lux-card relative overflow-hidden p-0">
+            <div className="grid-lines pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+            <div className="relative flex items-center justify-between gap-3 border-b border-gold-300/10 px-6 py-4">
+              <span className="label">Studio metrics</span>
+              <span className="inline-flex items-center gap-2 font-mono text-[10.5px] tracking-[0.14em] text-emerald-200 uppercase">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                </span>
+                Live
+              </span>
+            </div>
+            <div className="relative grid grid-cols-2 gap-px bg-gold-300/10">
+              {[
+                { v: String(projects.length), l: "Products built", icon: "layers" },
+                { v: String(live), l: "Live right now", icon: "activity" },
+                { v: String(repos), l: "Public repositories", icon: "github" },
+                { v: "90+", l: "Lighthouse on shipped work", icon: "gauge" as const },
+              ].map((s) => (
+                <div key={s.l} className="group relative bg-ink-900 p-6 transition-colors hover:bg-ink-850">
+                  <Icon name={s.icon === "gauge" ? "activity" : s.icon} className="h-4 w-4 text-gold-300/70" />
+                  <div className="display text-gold mt-4 text-[2.2rem] leading-none">{s.v}</div>
+                  <div className="mt-2 text-[12px] text-mist">{s.l}</div>
+                </div>
+              ))}
+            </div>
           </div>
         }
       >
@@ -49,6 +64,29 @@ export default function Portfolio() {
           </Button>
         ) : null}
       </PageHero>
+
+      <section className="pb-14">
+        <div className="shell">
+          <div className="lux-card flex flex-col gap-y-4 overflow-hidden px-6 py-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-8 md:px-8">
+            {[
+              { icon: "activity", label: "Running in production", sub: "Real traffic, real uptime" },
+              { icon: "github", label: "Open-source code", sub: "Read every repository" },
+              { icon: "shield", label: "Engineered to last", sub: "Caching, retries, monitoring" },
+              { icon: "gauge", label: "Performance-first", sub: "90+ Lighthouse at ship" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-3">
+                <span className="icon-tile h-10 w-10 shrink-0">
+                  <Icon name={item.icon === "gauge" ? "activity" : item.icon} className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className="text-[13.5px] font-semibold text-parchment">{item.label}</p>
+                  <p className="text-[11.5px] text-smoke">{item.sub}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section className="pb-24">
         <div className="shell">
