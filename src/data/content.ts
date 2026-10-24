@@ -566,6 +566,7 @@ export const team: TeamMember[] = [
     role: "PHP Laravel Developer",
     initials: "VK",
     photo: "/team/vijay.jpg",
+    location: "India",
     focus: "Laravel web applications, REST APIs and database-driven systems",
     headline: "Building modern, scalable and user-friendly web applications",
     bio: "Vijay is a PHP Laravel developer with hands-on experience in web development. He specialises in building responsive websites, dynamic web applications, REST APIs and database-driven systems using modern web technologies.",
@@ -586,7 +587,10 @@ export const team: TeamMember[] = [
       "Database design & integration",
       "Responsive UI development",
     ],
-    links: [{ label: "GitHub", href: "https://github.com/codewithrishee" }],
+    links: [
+      { label: "GitHub", href: "https://github.com/codewithrishee" },
+      { label: "Portfolio", href: "https://codewithrishee.github.io/vijayy-portfolio/" },
+    ],
   },
   {
     id: "om-gupta",

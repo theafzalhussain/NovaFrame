@@ -11,6 +11,7 @@
     "server": "tsx server/index.ts",
     "server:watch": "tsx watch server/index.ts",
     "admin:reset": "tsx server/reset-admin.ts",
+    "team:fix-links": "tsx server/fix-team-links.ts",
     "turso:push": "tsx server/push-to-turso.ts",
     "mail:test": "tsx server/mail-test.ts",
     "seed:php": "tsx server/export-seed.ts",

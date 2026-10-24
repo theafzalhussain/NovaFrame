@@ -59,7 +59,7 @@ function TeamProfile({ member, index }: { member: TeamMember; index: number }) {
       <div className="grid lg:grid-cols-[0.78fr_1.22fr]">
         {/* Portrait — uncropped photo, bold gold border, hover zoom (CSS transition only, no keyframes) */}
         <div className="p-5 sm:p-6 lg:p-7">
-          <figure className="group overflow-hidden rounded-[22px] border-[3px] border-gold-300/55 bg-ink-850 shadow-xl shadow-black/40 ring-4 ring-gold-300/10">
+          <figure className="group relative overflow-hidden rounded-[22px] border-[3px] border-gold-300/55 bg-ink-850 shadow-xl shadow-black/40 ring-4 ring-gold-300/10">
             {member.photo ? (
               <img
                 src={member.photo}
@@ -71,6 +71,34 @@ function TeamProfile({ member, index }: { member: TeamMember; index: number }) {
             ) : (
               <div className="display text-gold grid aspect-[15/16] w-full place-items-center text-[6rem]">{member.initials}</div>
             )}
+            {/* readability gradient */}
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-[4] h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/55 to-transparent" />
+            {/* name plate — matches the founder card: name, location and social links */}
+            <figcaption className="absolute inset-x-5 bottom-5 z-[5]">
+              <p className="display text-[1.4rem] leading-none text-ivory">{member.name}</p>
+              {member.location ? (
+                <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">
+                  <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" />
+                  {member.location}
+                </p>
+              ) : null}
+              {links.length ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {links.map((l) => (
+                    <a
+                      key={l.label}
+                      href={l.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={l.label}
+                      className="lux-glass grid h-10 w-10 place-items-center rounded-full text-parchment transition hover:scale-105 hover:text-gold-200"
+                    >
+                      <Icon name={l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase()} className="h-4 w-4" />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </figcaption>
           </figure>
 
           <FactList facts={facts} className="mt-5" />
