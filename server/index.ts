@@ -710,7 +710,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
   if (name.length < 2) errors.name = "Please enter your name.";
   if (!isEmail(email)) errors.email = "Please enter a valid email address.";
   if (!Number.isFinite(rupees) || rupees < 1) errors.amount = "Please enter a valid amount.";
-  if (rupees > 5_000_000) errors.amount = "That amount is too large — please contact us for large invoices.";
+  if (rupees > 10_000) errors.amount = "That amount is above our online limit — please contact us for larger invoices.";
   if (Object.keys(errors).length) return fail(res, 422, "Please check the highlighted fields.", { errors });
 
   const reference = newReference("NFP");

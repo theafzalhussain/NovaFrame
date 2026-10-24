@@ -103,7 +103,7 @@ export const services: Service[] = [
     short:
       "Marketing sites, online stores and full platforms built on React, Next.js and TypeScript — engineered against Core Web Vitals, not just design mockups.",
     deliverable: "Live deployment + repository + documentation",
-    startingAt: "₹45,000",
+    startingAt: "₹2,999",
     timeline: "3–8 weeks",
     items: [
       { title: "Business Websites", desc: "Pixel-accurate, component-driven websites with a private design system." },
@@ -123,7 +123,7 @@ export const services: Service[] = [
     short:
       "Node.js and Express APIs with caching, queues, payments and live updates — plus the admin dashboards your team runs the business from.",
     deliverable: "Documented API + admin panel + deployment",
-    startingAt: "₹60,000",
+    startingAt: "₹3,999",
     timeline: "4–8 weeks",
     items: [
       { title: "REST API Engineering", desc: "Validated, versioned endpoints with auth, roles and rate limiting." },
@@ -143,7 +143,7 @@ export const services: Service[] = [
     short:
       "Progressive Web Apps and cross-platform builds with offline storage, push notifications and app-store-grade polish — one codebase, every device.",
     deliverable: "Installable PWA or store-ready builds",
-    startingAt: "₹1,20,000",
+    startingAt: "₹6,999",
     timeline: "6–12 weeks",
     items: [
       { title: "Progressive Web Apps", desc: "Installable, offline-capable apps with service workers and web push." },
@@ -163,7 +163,7 @@ export const services: Service[] = [
     short:
       "Research-led product design from discovery to design-system handoff — every screen validated against a user flow and a business objective.",
     deliverable: "Figma files, prototype and documented design system",
-    startingAt: "₹35,000",
+    startingAt: "₹1,999",
     timeline: "2–4 weeks",
     items: [
       { title: "Responsive Web Design", desc: "Mobile-first layouts verified from 320px through ultrawide breakpoints." },
@@ -183,7 +183,7 @@ export const services: Service[] = [
     short:
       "Beyond keywords: server-rendered pages, schema, sitemaps and Core Web Vitals. Growth is reported monthly, with numbers you can audit.",
     deliverable: "Technical audit, implementation and monthly growth report",
-    startingAt: "₹25,000/mo",
+    startingAt: "₹999/mo",
     timeline: "Ongoing",
     items: [
       { title: "Technical SEO", desc: "SSR/ISR routes, canonical logic, sharded sitemaps and crawl debugging." },
@@ -203,7 +203,7 @@ export const services: Service[] = [
     short:
       "Launch films, product demos and social creatives — scripting, edit, motion graphics and sound handled by one accountable team.",
     deliverable: "Master files + platform-specific exports",
-    startingAt: "₹25,000",
+    startingAt: "₹1,499",
     timeline: "1–3 weeks",
     items: [
       { title: "Promotional Videos", desc: "Product launch films with hook-first scripting and a brand motion kit." },
@@ -478,8 +478,8 @@ export const packages: PricingPackage[] = [
   {
     id: "launch",
     name: "Launch",
-    price: "₹45,000",
-    usd: "~$540",
+    price: "₹2,999",
+    usd: "~$36",
     suffix: "starting price",
     best: false,
     timeline: "3–4 weeks",
@@ -497,8 +497,8 @@ export const packages: PricingPackage[] = [
   {
     id: "growth",
     name: "Growth",
-    price: "₹1,20,000",
-    usd: "~$1,440",
+    price: "₹6,999",
+    usd: "~$84",
     suffix: "starting price",
     best: true,
     timeline: "6–8 weeks",
@@ -516,8 +516,8 @@ export const packages: PricingPackage[] = [
   {
     id: "scale",
     name: "Scale",
-    price: "Custom",
-    usd: "Monthly retainer",
+    price: "₹9,999",
+    usd: "~$120 · monthly retainer",
     suffix: "dedicated capacity",
     best: false,
     timeline: "Ongoing",
@@ -653,7 +653,7 @@ export const faqs: Faq[] = [
   {
     id: "start",
     q: "How soon can a project start?",
-    a: "Kick-off usually happens 3–5 business days after the discovery call. Urgent builds can be fast-tracked with a priority slot (20% rush fee).",
+    a: "Kick-off usually happens 3–5 business days after the discovery call. Urgent builds can be fast-tracked with a priority slot (15% rush fee).",
   },
   {
     id: "pricing",
@@ -816,28 +816,28 @@ export const techStack: TechGroup[] = [
 export const advancedSettings: AdvancedSettings = {
   estimator: {
     types: [
-      { id: "website", label: "Business website", icon: "globe", base: 45_000, weeks: [3, 4], service: "Web Development", sizes: ["Up to 6 pages", "7–15 pages", "15+ pages"] },
-      { id: "store", label: "Online store", icon: "cart", base: 90_000, weeks: [5, 7], service: "Web Development", sizes: ["Up to 50 products", "50–500 products", "500+ products"] },
-      { id: "webapp", label: "Web app / SaaS", icon: "code", base: 1_20_000, weeks: [6, 8], service: "Web Development", sizes: ["MVP — core flows", "Full product", "Complex platform"] },
-      { id: "backend", label: "API / admin panel", icon: "server", base: 60_000, weeks: [4, 6], service: "Backend, APIs & Admin", sizes: ["Core API + auth", "Admin + integrations", "Real-time platform"] },
-      { id: "mobile", label: "Mobile app / PWA", icon: "phone", base: 1_20_000, weeks: [6, 9], service: "App Development", sizes: ["MVP — 5–8 screens", "10–20 screens", "20+ screens"] },
-      { id: "design", label: "UI/UX design", icon: "layers", base: 35_000, weeks: [2, 3], service: "UI/UX Design", sizes: ["Up to 8 screens", "9–25 screens", "Full design system"] },
-      { id: "video", label: "Promo / launch video", icon: "play", base: 25_000, weeks: [1, 2], service: "Video & Motion", sizes: ["30–45 seconds", "60–90 seconds", "Film + ad cut-downs"] },
+      { id: "website", label: "Business website", icon: "globe", base: 1_500, weeks: [3, 4], service: "Web Development", sizes: ["Up to 6 pages", "7–15 pages", "15+ pages"] },
+      { id: "store", label: "Online store", icon: "cart", base: 2_200, weeks: [5, 7], service: "Web Development", sizes: ["Up to 50 products", "50–500 products", "500+ products"] },
+      { id: "webapp", label: "Web app / SaaS", icon: "code", base: 3_000, weeks: [6, 8], service: "Web Development", sizes: ["MVP — core flows", "Full product", "Complex platform"] },
+      { id: "backend", label: "API / admin panel", icon: "server", base: 2_200, weeks: [4, 6], service: "Backend, APIs & Admin", sizes: ["Core API + auth", "Admin + integrations", "Real-time platform"] },
+      { id: "mobile", label: "Mobile app / PWA", icon: "phone", base: 3_000, weeks: [6, 9], service: "App Development", sizes: ["MVP — 5–8 screens", "10–20 screens", "20+ screens"] },
+      { id: "design", label: "UI/UX design", icon: "layers", base: 1_200, weeks: [2, 3], service: "UI/UX Design", sizes: ["Up to 8 screens", "9–25 screens", "Full design system"] },
+      { id: "video", label: "Promo / launch video", icon: "play", base: 1_000, weeks: [1, 2], service: "Video & Motion", sizes: ["30–45 seconds", "60–90 seconds", "Film + ad cut-downs"] },
     ],
-    sizeMultipliers: [1, 1.7, 2.6],
+    sizeMultipliers: [1, 1.4, 1.6],
     sizeWeeks: [0, 2, 4],
     extras: [
-      { id: "cms", label: "Admin panel / CMS", price: 15_000, for: ["website", "store", "webapp"] },
-      { id: "payments", label: "Online payments", price: 15_000, for: ["website", "store", "webapp", "backend", "mobile"] },
-      { id: "auth", label: "User accounts & login", price: 18_000, for: ["website", "store", "webapp", "backend", "mobile"] },
-      { id: "realtime", label: "Real-time updates", price: 20_000, for: ["store", "webapp", "backend", "mobile"] },
-      { id: "i18n", label: "Multi-language (EN/HI)", price: 10_000, for: ["website", "store", "webapp", "mobile", "design"] },
-      { id: "motion", label: "3D / advanced animation", price: 20_000, for: ["website", "store", "webapp", "design", "video"] },
-      { id: "seo", label: "SEO launch pack", price: 10_000, for: ["website", "store", "webapp"] },
-      { id: "push", label: "Push notifications", price: 12_000, for: ["mobile", "webapp"] },
-      { id: "voice", label: "Voice-over & captions", price: 8_000, for: ["video"] },
+      { id: "cms", label: "Admin panel / CMS", price: 300, for: ["website", "store", "webapp"] },
+      { id: "payments", label: "Online payments", price: 500, for: ["website", "store", "webapp", "backend", "mobile"] },
+      { id: "auth", label: "User accounts & login", price: 500, for: ["website", "store", "webapp", "backend", "mobile"] },
+      { id: "realtime", label: "Real-time updates", price: 700, for: ["store", "webapp", "backend", "mobile"] },
+      { id: "i18n", label: "Multi-language (EN/HI)", price: 300, for: ["website", "store", "webapp", "mobile", "design"] },
+      { id: "motion", label: "3D / advanced animation", price: 600, for: ["website", "store", "webapp", "design", "video"] },
+      { id: "seo", label: "SEO launch pack", price: 300, for: ["website", "store", "webapp"] },
+      { id: "push", label: "Push notifications", price: 300, for: ["mobile", "webapp"] },
+      { id: "voice", label: "Voice-over & captions", price: 300, for: ["video"] },
     ],
-    rushMultiplier: 1.2,
+    rushMultiplier: 1.15,
   },
   comparison: {
     columns: ["Typical agency", "Freelancer", "Novaframe"],
@@ -854,11 +854,11 @@ export const advancedSettings: AdvancedSettings = {
     ],
   },
   budgetRanges: [
-    { label: "Under ₹50,000", min: 0, max: 50_000 },
-    { label: "₹50,000 – ₹1,00,000", min: 50_000, max: 100_000 },
-    { label: "₹1,00,000 – ₹3,00,000", min: 100_000, max: 300_000 },
-    { label: "₹3,00,000 – ₹8,00,000", min: 300_000, max: 800_000 },
-    { label: "₹8,00,000+", min: 800_000, max: null },
+    { label: "Under ₹2,000", min: 0, max: 2_000 },
+    { label: "₹2,000 – ₹4,000", min: 2_000, max: 4_000 },
+    { label: "₹4,000 – ₹6,000", min: 4_000, max: 6_000 },
+    { label: "₹6,000 – ₹8,000", min: 6_000, max: 8_000 },
+    { label: "₹8,000 – ₹10,000+", min: 8_000, max: null },
   ],
   budgetUnsure: "Not sure yet — need guidance",
   timelineOptions: ["ASAP (within 2 weeks)", "In 1 month", "In 2–3 months", "Just exploring"],

@@ -146,7 +146,7 @@
           "id": "website",
           "label": "Business website",
           "icon": "globe",
-          "base": 45000,
+          "base": 1500,
           "weeks": [
             3,
             4
@@ -162,7 +162,7 @@
           "id": "store",
           "label": "Online store",
           "icon": "cart",
-          "base": 90000,
+          "base": 2200,
           "weeks": [
             5,
             7
@@ -178,7 +178,7 @@
           "id": "webapp",
           "label": "Web app / SaaS",
           "icon": "code",
-          "base": 120000,
+          "base": 3000,
           "weeks": [
             6,
             8
@@ -194,7 +194,7 @@
           "id": "backend",
           "label": "API / admin panel",
           "icon": "server",
-          "base": 60000,
+          "base": 2200,
           "weeks": [
             4,
             6
@@ -210,7 +210,7 @@
           "id": "mobile",
           "label": "Mobile app / PWA",
           "icon": "phone",
-          "base": 120000,
+          "base": 3000,
           "weeks": [
             6,
             9
@@ -226,7 +226,7 @@
           "id": "design",
           "label": "UI/UX design",
           "icon": "layers",
-          "base": 35000,
+          "base": 1200,
           "weeks": [
             2,
             3
@@ -242,7 +242,7 @@
           "id": "video",
           "label": "Promo / launch video",
           "icon": "play",
-          "base": 25000,
+          "base": 1000,
           "weeks": [
             1,
             2
@@ -257,8 +257,8 @@
       ],
       "sizeMultipliers": [
         1,
-        1.7,
-        2.6
+        1.4,
+        1.6
       ],
       "sizeWeeks": [
         0,
@@ -269,7 +269,7 @@
         {
           "id": "cms",
           "label": "Admin panel / CMS",
-          "price": 15000,
+          "price": 300,
           "for": [
             "website",
             "store",
@@ -279,7 +279,7 @@
         {
           "id": "payments",
           "label": "Online payments",
-          "price": 15000,
+          "price": 500,
           "for": [
             "website",
             "store",
@@ -291,7 +291,7 @@
         {
           "id": "auth",
           "label": "User accounts & login",
-          "price": 18000,
+          "price": 500,
           "for": [
             "website",
             "store",
@@ -303,7 +303,7 @@
         {
           "id": "realtime",
           "label": "Real-time updates",
-          "price": 20000,
+          "price": 700,
           "for": [
             "store",
             "webapp",
@@ -314,7 +314,7 @@
         {
           "id": "i18n",
           "label": "Multi-language (EN/HI)",
-          "price": 10000,
+          "price": 300,
           "for": [
             "website",
             "store",
@@ -326,7 +326,7 @@
         {
           "id": "motion",
           "label": "3D / advanced animation",
-          "price": 20000,
+          "price": 600,
           "for": [
             "website",
             "store",
@@ -338,7 +338,7 @@
         {
           "id": "seo",
           "label": "SEO launch pack",
-          "price": 10000,
+          "price": 300,
           "for": [
             "website",
             "store",
@@ -348,7 +348,7 @@
         {
           "id": "push",
           "label": "Push notifications",
-          "price": 12000,
+          "price": 300,
           "for": [
             "mobile",
             "webapp"
@@ -357,13 +357,13 @@
         {
           "id": "voice",
           "label": "Voice-over & captions",
-          "price": 8000,
+          "price": 300,
           "for": [
             "video"
           ]
         }
       ],
-      "rushMultiplier": 1.2
+      "rushMultiplier": 1.15
     },
     "comparison": {
       "columns": [
@@ -448,28 +448,28 @@
     },
     "budgetRanges": [
       {
-        "label": "Under ₹50,000",
+        "label": "Under ₹2,000",
         "min": 0,
-        "max": 50000
+        "max": 2000
       },
       {
-        "label": "₹50,000 – ₹1,00,000",
-        "min": 50000,
-        "max": 100000
+        "label": "₹2,000 – ₹4,000",
+        "min": 2000,
+        "max": 4000
       },
       {
-        "label": "₹1,00,000 – ₹3,00,000",
-        "min": 100000,
-        "max": 300000
+        "label": "₹4,000 – ₹6,000",
+        "min": 4000,
+        "max": 6000
       },
       {
-        "label": "₹3,00,000 – ₹8,00,000",
-        "min": 300000,
-        "max": 800000
+        "label": "₹6,000 – ₹8,000",
+        "min": 6000,
+        "max": 8000
       },
       {
-        "label": "₹8,00,000+",
-        "min": 800000,
+        "label": "₹8,000 – ₹10,000+",
+        "min": 8000,
         "max": null
       }
     ],
@@ -574,7 +574,7 @@
         "tagline": "Fast, SEO-first websites and web applications",
         "short": "Marketing sites, online stores and full platforms built on React, Next.js and TypeScript — engineered against Core Web Vitals, not just design mockups.",
         "deliverable": "Live deployment + repository + documentation",
-        "startingAt": "₹45,000",
+        "startingAt": "₹2,999",
         "timeline": "3–8 weeks",
         "items": [
           {
@@ -617,7 +617,7 @@
         "tagline": "The engine room: payments, data and real-time",
         "short": "Node.js and Express APIs with caching, queues, payments and live updates — plus the admin dashboards your team runs the business from.",
         "deliverable": "Documented API + admin panel + deployment",
-        "startingAt": "₹60,000",
+        "startingAt": "₹3,999",
         "timeline": "4–8 weeks",
         "items": [
           {
@@ -661,7 +661,7 @@
         "tagline": "Installable apps that feel native on every screen",
         "short": "Progressive Web Apps and cross-platform builds with offline storage, push notifications and app-store-grade polish — one codebase, every device.",
         "deliverable": "Installable PWA or store-ready builds",
-        "startingAt": "₹1,20,000",
+        "startingAt": "₹6,999",
         "timeline": "6–12 weeks",
         "items": [
           {
@@ -704,7 +704,7 @@
         "tagline": "Interfaces engineered to convert, not just impress",
         "short": "Research-led product design from discovery to design-system handoff — every screen validated against a user flow and a business objective.",
         "deliverable": "Figma files, prototype and documented design system",
-        "startingAt": "₹35,000",
+        "startingAt": "₹1,999",
         "timeline": "2–4 weeks",
         "items": [
           {
@@ -747,7 +747,7 @@
         "tagline": "Technical SEO built into the architecture",
         "short": "Beyond keywords: server-rendered pages, schema, sitemaps and Core Web Vitals. Growth is reported monthly, with numbers you can audit.",
         "deliverable": "Technical audit, implementation and monthly growth report",
-        "startingAt": "₹25,000/mo",
+        "startingAt": "₹999/mo",
         "timeline": "Ongoing",
         "items": [
           {
@@ -790,7 +790,7 @@
         "tagline": "Motion design that sells the product story",
         "short": "Launch films, product demos and social creatives — scripting, edit, motion graphics and sound handled by one accountable team.",
         "deliverable": "Master files + platform-specific exports",
-        "startingAt": "₹25,000",
+        "startingAt": "₹1,499",
         "timeline": "1–3 weeks",
         "items": [
           {
@@ -1192,8 +1192,8 @@
       {
         "id": "launch",
         "name": "Launch",
-        "price": "₹45,000",
-        "usd": "~$540",
+        "price": "₹2,999",
+        "usd": "~$36",
         "suffix": "starting price",
         "best": false,
         "timeline": "3–4 weeks",
@@ -1211,8 +1211,8 @@
       {
         "id": "growth",
         "name": "Growth",
-        "price": "₹1,20,000",
-        "usd": "~$1,440",
+        "price": "₹6,999",
+        "usd": "~$84",
         "suffix": "starting price",
         "best": true,
         "timeline": "6–8 weeks",
@@ -1230,8 +1230,8 @@
       {
         "id": "scale",
         "name": "Scale",
-        "price": "Custom",
-        "usd": "Monthly retainer",
+        "price": "₹9,999",
+        "usd": "~$120 · monthly retainer",
         "suffix": "dedicated capacity",
         "best": false,
         "timeline": "Ongoing",
@@ -1510,7 +1510,7 @@
       {
         "id": "start",
         "q": "How soon can a project start?",
-        "a": "Kick-off usually happens 3–5 business days after the discovery call. Urgent builds can be fast-tracked with a priority slot (20% rush fee)."
+        "a": "Kick-off usually happens 3–5 business days after the discovery call. Urgent builds can be fast-tracked with a priority slot (15% rush fee)."
       },
       {
         "id": "pricing",

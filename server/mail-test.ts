@@ -41,7 +41,7 @@ const lead = leadEmails(
 );
 const booking = bookingEmails({ reference: "NFC-SAMPLE", ...client, topic: "New website", date: inTwoDays, time: settings.booking.slots[0] ?? "11:00 AM", notes: "Sample booking." }, ctx);
 const payment = paymentEmails(
-  { reference: "NFP-SAMPLE", ...client, purpose: "Project advance", amount: 25000, currency: "INR", paymentId: "pay_SAMPLE", orderId: "order_SAMPLE", method: "UPI", testMode: true },
+  { reference: "NFP-SAMPLE", ...client, purpose: "Project advance", amount: 5000, currency: "INR", paymentId: "pay_SAMPLE", orderId: "order_SAMPLE", method: "UPI", testMode: true },
   ctx,
 );
 

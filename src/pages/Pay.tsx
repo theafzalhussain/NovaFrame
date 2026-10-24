@@ -12,7 +12,7 @@ import { cn } from "../utils/cn";
 type FormState = { name: string; email: string; phone: string; companyName: string; purpose: string; amount: string; website: string };
 const EMPTY: FormState = { name: "", email: "", phone: "", companyName: "", purpose: "", amount: "", website: "" };
 const PURPOSES = ["Project advance", "Milestone payment", "Final payment", "Maintenance & support", "Consultation"];
-const MAX_AMOUNT = 5_000_000;
+const MAX_AMOUNT = 10_000;
 
 type Stage = "idle" | "starting" | "checkout" | "verifying";
 
@@ -67,7 +67,7 @@ export default function PayPage() {
   const busy = stage !== "idle";
   const currency = config?.currency ?? "INR";
 
-  // Shareable pre-filled links: #/pay?amount=25000&for=Website%20advance
+  // Shareable pre-filled links: #/pay?amount=5000&for=Website%20advance
   useEffect(() => {
     const amount = query.get("amount");
     const purpose = query.get("for") ?? query.get("purpose");
@@ -302,7 +302,7 @@ export default function PayPage() {
                           className="field pl-9 text-[16px] font-semibold"
                           inputMode="numeric"
                           autoComplete="off"
-                          placeholder="25000"
+                          placeholder="5000"
                           value={form.amount}
                           onChange={(e) => set("amount", e.target.value.replace(/[^\d]/g, "").slice(0, 8))}
                           aria-invalid={Boolean(errors.amount)}

@@ -128,7 +128,7 @@ Email and payments are only available in the Node edition.
 **Payments:** the browser asks the API to create a Razorpay order (the amount is fixed server-side), opens Razorpay Checkout, then sends the signed result to `/api/payments/verify`.
 The server checks the HMAC signature, captures the payment if the account uses manual capture, marks it paid, logs it on the payer's lead and sends the receipt. Every step is idempotent.
 For production, also add a webhook in Razorpay Dashboard → Webhooks (`https://<your-domain>/api/payments/webhook`, events `payment.captured` and `order.paid`) with the same secret as `RAZORPAY_WEBHOOK_SECRET` — it confirms payments even if the visitor closes the tab.
-Share pre-filled payment links like `/#/pay?amount=25000&for=Website%20advance`. To go live, complete Razorpay KYC and swap in the `rzp_live_` keys.
+Share pre-filled payment links like `/#/pay?amount=5000&for=Website%20advance`. To go live, complete Razorpay KYC and swap in the `rzp_live_` keys.
 
 **Content defaults:** `src/data/content.ts` and `src/data/content-extra.ts`, combined in `src/data/defaults.ts`, have three jobs:
 - seed a fresh database

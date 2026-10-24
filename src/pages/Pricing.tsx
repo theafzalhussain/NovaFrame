@@ -80,7 +80,7 @@ export default function Pricing() {
                     className="w-full"
                     track={`pricing_${pkg.id}`}
                   >
-                    {pkg.price === "Custom" ? "Plan a retainer" : `Start with ${pkg.name}`}
+                    {pkg.timeline === "Ongoing" ? "Plan a retainer" : `Start with ${pkg.name}`}
                   </Button>
                 </div>
               </article>

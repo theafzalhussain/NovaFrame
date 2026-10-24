@@ -149,7 +149,7 @@ function LeadDrawer({ id, onClose, onChanged }: { id: number; onClose: () => voi
           <div>
             <p className="label mb-3">Deal value (₹)</p>
             <div className="flex gap-2">
-              <input className="field field-sm" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, ""))} placeholder="e.g. 120000" />
+              <input className="field field-sm" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, ""))} placeholder="e.g. 6000" />
               <button type="button" className="btn btn-line btn-sm" onClick={() => patch({ valueEstimate: value ? Number(value) : null }, "Deal value saved.")}>
                 Save
               </button>
