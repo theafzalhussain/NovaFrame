@@ -599,14 +599,32 @@ function FounderSection() {
               {/* readability gradient */}
               <div className="absolute inset-x-0 bottom-0 z-[4] h-2/5 bg-gradient-to-t from-ink-950 via-ink-950/60 to-transparent" />
               {/* name plate */}
-              <figcaption className="absolute inset-x-6 bottom-6 z-[5] flex items-end justify-between gap-3">
-                <div>
-                  <p className="display text-[1.6rem] leading-none text-ivory">{founder.name}</p>
-                  <p className="mt-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">{founder.role}</p>
+              <figcaption className="absolute inset-x-6 bottom-6 z-[5] flex flex-col gap-3">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="display text-[1.6rem] leading-none text-ivory">{founder.name}</p>
+                    <p className="mt-1.5 text-[12.5px] font-medium tracking-wide text-gold-200">{founder.role}</p>
+                  </div>
+                  <span className="chip shrink-0">
+                    <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" /> {founder.location ?? settings.city}
+                  </span>
                 </div>
-                <span className="chip shrink-0">
-                  <Icon name="map-pin" className="h-3.5 w-3.5 text-gold-300" /> {founder.location ?? settings.city}
-                </span>
+                {founder.links?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {founder.links.map((l) => (
+                      <a
+                        key={l.label}
+                        href={l.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={l.label}
+                        className="lux-glass grid h-10 w-10 place-items-center rounded-full text-parchment transition hover:scale-105 hover:text-gold-200"
+                      >
+                        <Icon name={l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase()} className="h-4 w-4" />
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
               </figcaption>
             </figure>
             <Seal size={120} className="absolute -top-6 -right-6 hidden drop-shadow-lg sm:block" />
@@ -662,18 +680,6 @@ function FounderSection() {
               <Button to="/book" arrow track="founder_book">
                 Book a call with {founder.name.split(" ")[0]}
               </Button>
-              {founder.links.map((l) => (
-                <a
-                  key={l.label}
-                  href={l.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-full border border-gold-300/20 px-4 py-2.5 text-[13px] font-semibold text-parchment transition hover:border-gold-300/60 hover:text-gold-200"
-                >
-                  <Icon name={l.label.toLowerCase() === "portfolio" ? "globe" : l.label.toLowerCase()} className="h-4 w-4" />
-                  {l.label}
-                </a>
-              ))}
             </div>
           </Reveal>
         </div>

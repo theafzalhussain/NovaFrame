@@ -49,7 +49,7 @@ export default function Pricing() {
             <Reveal key={pkg.id} delay={i * 90}>
               <article className={cn("lux-card relative flex h-full flex-col p-8 md:p-9", pkg.best && "gold-orbit bg-gradient-to-b from-gold-400/[0.08] to-transparent")}>
                 {pkg.best ? (
-                  <span className="absolute -top-3 left-8 rounded-full bg-gradient-to-b from-gold-200 to-gold-500 px-3.5 py-1 font-mono text-[10px] font-medium tracking-[0.16em] text-ink-950 uppercase">
+                  <span className="mb-4 inline-flex w-fit rounded-full bg-gradient-to-b from-gold-200 to-gold-500 px-3.5 py-1 font-mono text-[10px] font-medium tracking-[0.16em] text-ink-950 uppercase shadow-lg shadow-black/40">
                     Most chosen
                   </span>
                 ) : null}
