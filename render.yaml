@@ -18,7 +18,7 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
-        value: "20.18.0"
+        value: "26.x"
       # --- Database (Turso) — required ---
       - key: TURSO_DATABASE_URL
         sync: false # libsql://<your-db>.turso.io

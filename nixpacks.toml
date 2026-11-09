@@ -2,4 +2,4 @@
 # The data layer is @libsql/client (prebuilt binaries, no compile step), so
 # only Node + npm are needed here.
 [phases.setup]
-nixPkgs = ["nodejs_20", "npm-9_x"]
+nixPkgs = ["nodejs_26", "npm-9_x"]
