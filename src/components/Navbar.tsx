@@ -8,7 +8,7 @@ import { Icon } from "./Icons";
 import { StatusDot, useStudioStatus } from "./StudioStatus";
 import { cn } from "../utils/cn";
 
-const ANNOUNCE_KEY = "nf_announce_dismissed";
+const ANNOUNCE_KEY = "wx_announce_dismissed";
 
 export default function Navbar() {
   const { path } = useRouter();
@@ -246,12 +246,27 @@ export default function Navbar() {
                   ) : null}
                 </Link>
               ))}
+
+            {/* Student Partner program — set apart from the page links with a gold outline. */}
+            <Link
+              to="/earn"
+              onClick={() => track("cta_click", { label: "nav_earn" })}
+              className={cn(
+                "ml-1.5 inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-semibold whitespace-nowrap transition-colors",
+                isActivePath(path, "/earn") || isActivePath(path, "/partner")
+                  ? "border-gold-300/60 bg-gold-400/15 text-gold-100"
+                  : "border-gold-300/30 text-gold-200 hover:border-gold-300/60 hover:text-gold-100",
+              )}
+            >
+              <Icon name="rupee" className="h-3.5 w-3.5" />
+              Earn<span className="hidden 2xl:inline">&nbsp;With Us</span>
+            </Link>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new Event("nf:palette"))}
+              onClick={() => window.dispatchEvent(new Event("wx:palette"))}
               aria-label="Search the site"
               title="Search (Ctrl + K)"
               className="hidden items-center gap-2 rounded-full border border-gold-300/12 py-2 pr-2 pl-3 text-mist transition hover:border-gold-300/30 hover:text-ivory md:inline-flex"
@@ -311,7 +326,7 @@ export default function Navbar() {
         <div className="shell flex min-h-full flex-col py-8">
           <p className="label">Menu</p>
           <div className="mt-4 flex flex-col">
-            {[{ label: "Home", to: "/" }, ...navLinks, { label: "Tech stack", to: "/tech-stack" }].map((link, i) => (
+            {[{ label: "Home", to: "/" }, ...navLinks, { label: "Earn With Us", to: "/earn" }, { label: "Tech stack", to: "/tech-stack" }].map((link, i) => (
               <Link
                 key={link.to}
                 to={link.to}

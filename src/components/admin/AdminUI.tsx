@@ -211,6 +211,21 @@ const TONES: Record<string, string> = {
   editor: "border-violet-300/30 bg-violet-300/10 text-violet-100",
   published: "border-sage/50 bg-sage/15 text-[#dff3e6]",
   draft: "border-smoke/40 bg-smoke/10 text-mist",
+  // Partner program
+  active: "border-sage/50 bg-sage/15 text-[#dff3e6]",
+  suspended: "border-ember/40 bg-ember/10 text-[#ffd9cc]",
+  partner: "border-gold-300/25 bg-gold-300/5 text-sand",
+  ambassador: "border-gold-300/50 bg-gold-400/15 text-gold-100",
+  pending: "border-amber-300/40 bg-amber-300/10 text-amber-100",
+  requested: "border-amber-300/40 bg-amber-300/10 text-amber-100",
+  verified: "border-sage/50 bg-sage/15 text-[#dff3e6]",
+  approved: "border-sage/50 bg-sage/15 text-[#dff3e6]",
+  paid: "border-sage/50 bg-sage/15 text-[#dff3e6]",
+  earned: "border-sage/50 bg-sage/15 text-[#dff3e6]",
+  rejected: "border-ember/40 bg-ember/10 text-[#ffd9cc]",
+  refunded: "border-ember/40 bg-ember/10 text-[#ffd9cc]",
+  reversed: "border-ember/40 bg-ember/10 text-[#ffd9cc]",
+  flagged: "border-amber-300/40 bg-amber-300/10 text-amber-100",
 };
 
 export function Badge({ value, label, className }: { value: string; label?: string; className?: string }) {

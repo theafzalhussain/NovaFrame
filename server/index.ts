@@ -1,5 +1,5 @@
 /**
- * Novaframe Studio — API server (Node.js + Express + SQLite)
+ * WebXstudio — API server (Node.js + Express + SQLite)
  * ----------------------------------------------------------
  * Public:  content bootstrap, enquiries, call bookings, newsletter, analytics events
  * Admin:   token sessions (PBKDF2 + hashed bearer tokens), role-based access,
@@ -28,6 +28,7 @@ import {
 import { defaultContent } from "../src/data/defaults.js";
 import { mailEnabled, mailBackend, notifyBooking, notifyLead, notifyPayment, verifyMail, type MailContext } from "./mailer.js";
 import Razorpay from "razorpay";
+import { recordRazorpayCommission, registerPartnerRoutes, resolveReferral } from "./partners.js";
 import {
   TZ_MOD,
   all,
@@ -111,7 +112,7 @@ function deepMerge<T>(base: T, override: unknown): T {
 const siteSettings = async () => deepMerge(defaultContent.settings, await readSetting<SiteSettings>("site"));
 const advancedSettings = async () => deepMerge(defaultContent.advanced, await readSetting<AdvancedSettings>("advanced"));
 
-/** Public site URL for links inside emails (optional, e.g. https://novaframe.studio). */
+/** Public site URL for links inside emails (optional, e.g. https://webxstudio.me). */
 const SITE_URL = /^https?:\/\//i.test(process.env.SITE_URL ?? "") ? (process.env.SITE_URL as string).replace(/\/+$/, "") : undefined;
 
 /** Branding + signature used by every outgoing email. */
@@ -251,7 +252,7 @@ const ownerOnly = requireRole("owner");
 /* ------------------------------------------------------------------ */
 app.get("/api/health", async (_req, res) => {
   const { c } = (await get<{ c: number }>("SELECT count(*) AS c FROM content")) ?? { c: 0 };
-  ok(res, { service: "novaframe-api", database: usingTurso ? "turso" : "sqlite", contentItems: c, time: new Date().toISOString() });
+  ok(res, { service: "webxstudio-api", database: usingTurso ? "turso" : "sqlite", contentItems: c, time: new Date().toISOString() });
 });
 
 async function publishedCollection(name: CollectionName) {
@@ -344,17 +345,28 @@ app.get("/api/media/:id", async (req, res) => {
 function insertEnquiry(args: Args) {
   return run(
     `INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline,
-      project_details, source, value_estimate, ip_address, user_agent)
+      project_details, source, value_estimate, ip_address, user_agent, partner_id, referral_code)
     VALUES (@reference, @name, @company, @email, @phone, @service, @budget, @timeline,
-      @details, @source, @value, @ip, @ua)`,
+      @details, @source, @value, @ip, @ua, @partnerId, @referralCode)`,
     args,
   );
+}
+
+/** Partner attribution for a public form (referral link code + first-touch rule). Never blocks the form. */
+async function referralFor(code: unknown, email: string): Promise<{ partnerId: number | null; referralCode: string | null }> {
+  try {
+    const hit = await resolveReferral(code, email);
+    return { partnerId: hit?.partnerId ?? null, referralCode: hit?.code ?? null };
+  } catch (err) {
+    console.error("[partners] referral lookup failed:", (err as Error).message);
+    return { partnerId: null, referralCode: null };
+  }
 }
 
 app.post("/api/enquiries", formLimiter, async (req, res) => {
   const b = req.body ?? {};
   // Honeypot — bots fill every field. Pretend success, store nothing.
-  if (str(b.website, 200)) return ok(res, { reference: newReference("NF"), message: "Received" }, 201);
+  if (str(b.website, 200)) return ok(res, { reference: newReference("WX"), message: "Received" }, 201);
 
   const name = str(b.name, 120);
   const email = str(b.email, 160).toLowerCase();
@@ -366,7 +378,7 @@ app.post("/api/enquiries", formLimiter, async (req, res) => {
   if (Object.keys(errors).length) return fail(res, 422, "Please check the highlighted fields.", { errors });
 
   const budget = str(b.budget, 80) || "Not specified";
-  const reference = newReference("NF");
+  const reference = newReference("WX");
   const lead = {
     reference,
     name,
@@ -379,7 +391,7 @@ app.post("/api/enquiries", formLimiter, async (req, res) => {
     details,
     source: (str(b.source, 30).replace(/[^a-z_-]/gi, "") || "contact").toLowerCase(),
   };
-  await insertEnquiry({ ...lead, value: await estimateValue(budget), ip: ipOf(req), ua: uaOf(req) });
+  await insertEnquiry({ ...lead, value: await estimateValue(budget), ip: ipOf(req), ua: uaOf(req), ...(await referralFor(b.referralCode, email)) });
   notifyLead(lead, await mailContext()).catch((err) => console.error("[mail] lead notification failed:", (err as Error).message));
   ok(res, { reference, message: "Enquiry received. We reply within 12 business hours.", mail: mailEnabled() }, 201);
 });
@@ -399,7 +411,7 @@ app.get("/api/bookings/availability", async (req, res) => {
 
 app.post("/api/bookings", formLimiter, async (req, res) => {
   const b = req.body ?? {};
-  if (str(b.website, 200)) return ok(res, { reference: newReference("NFC") }, 201);
+  if (str(b.website, 200)) return ok(res, { reference: newReference("WXC") }, 201);
 
   const settings = await siteSettings();
   const name = str(b.name, 120);
@@ -425,8 +437,9 @@ app.post("/api/bookings", formLimiter, async (req, res) => {
   const notes = str(b.notes, 2000);
   const company = str(b.companyName, 160);
   const phone = str(b.phone, 40);
-  const reference = newReference("NFC");
-  const enquiryReference = newReference("NF");
+  const reference = newReference("WXC");
+  const enquiryReference = newReference("WX");
+  const referral = await referralFor(b.referralCode, email);
 
   try {
     // Atomic: create the lead then the booking. The UNIQUE active-slot index
@@ -434,9 +447,9 @@ app.post("/api/bookings", formLimiter, async (req, res) => {
     await tx([
       [
         `INSERT INTO enquiries (reference, name, company_name, email, phone, service, budget_range, timeline,
-          project_details, source, value_estimate, ip_address, user_agent)
+          project_details, source, value_estimate, ip_address, user_agent, partner_id, referral_code)
         VALUES (@reference, @name, @company, @email, @phone, @service, @budget, @timeline,
-          @details, @source, @value, @ip, @ua)`,
+          @details, @source, @value, @ip, @ua, @partnerId, @referralCode)`,
         {
           reference: enquiryReference,
           name,
@@ -451,6 +464,7 @@ app.post("/api/bookings", formLimiter, async (req, res) => {
           value: await estimateValue(budget),
           ip: ipOf(req),
           ua: uaOf(req),
+          ...referral,
         },
       ],
       [
@@ -649,6 +663,10 @@ async function settlePayment(orderId: string, paymentId: string): Promise<Paymen
       await paymentQ.leadNote(fresh.enquiry_id, `Payment received — ${amountLabel}${method ? ` via ${method}` : ""} · ${paymentId}${paymentsTestMode() ? " (test mode)" : ""}`);
     }
     console.log(`[payment] ${fresh.reference} paid — ${amountLabel} (${paymentId})`);
+    // Referred client? Mirror the verified payment into the partner ledger and credit the commission.
+    await recordRazorpayCommission(fresh).catch((err) =>
+      console.error(`[partners] commission for ${fresh.reference} failed:`, (err as Error).message),
+    );
     notifyPayment(
       {
         reference: fresh.reference,
@@ -703,7 +721,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
 
   const name = str(b.name, 120);
   const email = str(b.email, 160).toLowerCase();
-  const purpose = str(b.purpose, 160) || "Payment to Novaframe Studio";
+  const purpose = str(b.purpose, 160) || "Payment to WebXstudio";
   // Amount arrives in major units (rupees). Clamp to a sane range.
   const rupees = Math.round(Number(b.amount));
   const errors: Record<string, string> = {};
@@ -713,7 +731,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
   if (rupees > 10_000) errors.amount = "That amount is above our online limit — please contact us for larger invoices.";
   if (Object.keys(errors).length) return fail(res, 422, "Please check the highlighted fields.", { errors });
 
-  const reference = newReference("NFP");
+  const reference = newReference("WXP");
   const amountPaise = rupees * 100; // Razorpay works in the smallest currency unit
   const company = str(b.companyName, 160);
   const phone = str(b.phone, 40);
@@ -728,7 +746,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
 
     // Record a lead so every payer shows up in the admin CRM, then the payment row.
     const enquiry = await insertEnquiry({
-      reference: newReference("NF"),
+      reference: newReference("WX"),
       name,
       company,
       email,
@@ -741,6 +759,7 @@ app.post("/api/payments/order", paymentLimiter, async (req, res) => {
       value: rupees,
       ip: ipOf(req),
       ua: uaOf(req),
+      ...(await referralFor(b.referralCode, email)),
     });
 
     await paymentQ.insert({
@@ -1051,6 +1070,7 @@ app.get("/api/admin/analytics", adminOnly, async (req, res) => {
 /* ------------------------------------------------------------------ */
 const LEAD_COLUMNS = `id, reference, name, company_name AS companyName, email, phone, service, budget_range AS budget, timeline,
   project_details AS details, status, priority, value_estimate AS valueEstimate, internal_notes AS notes, source,
+  partner_id AS partnerId, (SELECT p.full_name || ' · ' || p.partner_code FROM partners p WHERE p.id = enquiries.partner_id) AS partner,
   created_at AS createdAt, updated_at AS updatedAt`;
 
 app.get("/api/admin/enquiries", adminOnly, async (_req, res) => {
@@ -1542,10 +1562,36 @@ app.get("/api/admin/export", adminOnly, async (req: AuthedRequest, res) => {
     payload.enquiries = await all(`SELECT ${LEAD_COLUMNS} FROM enquiries`);
     payload.bookings = await all(`SELECT ${BOOKING_COLUMNS} FROM bookings`);
     payload.subscribers = await all("SELECT email, source, created_at FROM subscribers");
+    // Partner program (password hashes and salts are never exported).
+    payload.partners = await all(
+      `SELECT id, partner_code, referral_code, full_name, email, phone, college, course, graduation_year, city, region, upi_id,
+         bank_account_name, bank_account_number, bank_ifsc, pan, tier, status, suspended_reason, flags, created_at FROM partners`,
+    );
+    payload.clientPayments = await all("SELECT * FROM client_payments");
+    payload.partnerCommissions = await all("SELECT * FROM partner_commissions");
+    payload.partnerPayouts = await all("SELECT * FROM partner_payouts");
+    payload.ambassadorApplications = await all("SELECT * FROM ambassador_applications");
   }
   await audit(req, "EXPORT", `EXPORT_${scope.toUpperCase()}`);
-  res.setHeader("Content-Disposition", `attachment; filename="novaframe-${scope}-${dateInTz("UTC")}.json"`);
+  res.setHeader("Content-Disposition", `attachment; filename="webxstudio-${scope}-${dateInTz("UTC")}.json"`);
   ok(res, payload);
+});
+
+/* ------------------------------------------------------------------ */
+/* Student Partner & Campus Ambassador program (server/partners.ts)   */
+/* ------------------------------------------------------------------ */
+registerPartnerRoutes(app, {
+  ok,
+  fail,
+  str,
+  isEmail,
+  ipOf,
+  uaOf,
+  rateLimit,
+  audit,
+  adminOnly,
+  estimateValue,
+  sessionDays: SESSION_DAYS,
 });
 
 /* ------------------------------------------------------------------ */
@@ -1586,7 +1632,7 @@ app.use((err: Error & { type?: string; status?: number }, _req: Request, res: Re
 await initDb();
 
 app.listen(PORT, () => {
-  console.log(`\n  > Novaframe API ready:  http://localhost:${PORT}/api/health`);
+  console.log(`\n  > WebXstudio API ready:  http://localhost:${PORT}/api/health`);
   console.log(`  > Admin console:       http://localhost:5173/#/admin (dev) or this server's /#/admin`);
   console.log(`  > Email notifications: ${mailEnabled() ? `on (${mailBackend()})` : "off (set RESEND_API_KEY or SMTP_HOST to enable)"}`);
   console.log(`  > Online payments:     ${paymentsEnabled() ? `on (Razorpay ${paymentsTestMode() ? "TEST" : "LIVE"} mode)` : "off (set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)"}\n`);

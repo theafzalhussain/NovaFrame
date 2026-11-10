@@ -36,12 +36,12 @@ const client = { name: "Sample Client", email: to, phone: "+91 90000 00000", com
 const inTwoDays = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
 
 const lead = leadEmails(
-  { reference: "NF-SAMPLE", ...client, service: "Web Development", budget: "₹50,000 – ₹1,00,000", timeline: "In 1 month", details: "This is a sample enquiry sent by `npm run mail:test`.", source: "contact" },
+  { reference: "WX-SAMPLE", ...client, service: "Web Development", budget: "₹50,000 – ₹1,00,000", timeline: "In 1 month", details: "This is a sample enquiry sent by `npm run mail:test`.", source: "contact" },
   ctx,
 );
-const booking = bookingEmails({ reference: "NFC-SAMPLE", ...client, topic: "New website", date: inTwoDays, time: settings.booking.slots[0] ?? "11:00 AM", notes: "Sample booking." }, ctx);
+const booking = bookingEmails({ reference: "WXC-SAMPLE", ...client, topic: "New website", date: inTwoDays, time: settings.booking.slots[0] ?? "11:00 AM", notes: "Sample booking." }, ctx);
 const payment = paymentEmails(
-  { reference: "NFP-SAMPLE", ...client, purpose: "Project advance", amount: 5000, currency: "INR", paymentId: "pay_SAMPLE", orderId: "order_SAMPLE", method: "UPI", testMode: true },
+  { reference: "WXP-SAMPLE", ...client, purpose: "Project advance", amount: 5000, currency: "INR", paymentId: "pay_SAMPLE", orderId: "order_SAMPLE", method: "UPI", testMode: true },
   ctx,
 );
 

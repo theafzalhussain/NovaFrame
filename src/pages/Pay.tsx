@@ -222,7 +222,7 @@ export default function PayPage() {
     <>
       <PageHero
         eyebrow="Secure payment"
-        title="Pay Novaframe Studio"
+        title="Pay WebXstudio"
         highlight="safely online."
         description="Settle an invoice, advance or milestone by UPI, card, net banking or wallet. Payments are processed by Razorpay — we never see or store your card or bank details."
       >

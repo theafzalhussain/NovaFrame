@@ -1,15 +1,15 @@
 {
   "settings": {
-    "name": "Novaframe Studio",
-    "legal": "Novaframe Studio",
-    "short": "Novaframe",
+    "name": "WebXstudio",
+    "legal": "WebXstudio",
+    "short": "WebXstudio",
     "tagline": "Digital products, engineered to perform.",
-    "description": "Novaframe is a founder-led digital studio in New Delhi. We design and engineer fast websites, web apps, online stores and PWAs — on the same React, Next.js and Node.js stack behind five live products you can open today.",
+    "description": "WebXstudio is a founder-led digital studio in New Delhi. We design and engineer fast websites, web apps, online stores and PWAs — on the same React, Next.js and Node.js stack behind five live products you can open today.",
     "founded": "2026",
     "email": "theafzalhussain786@gmail.com",
     "phone": "+91 84478 59784",
     "whatsapp": "918447859784",
-    "whatsappMessage": "Hi Novaframe! I'd like to discuss a project.",
+    "whatsappMessage": "Hi WebXstudio! I'd like to discuss a project.",
     "location": "New Delhi, India · Working worldwide",
     "city": "New Delhi",
     "country": "IN",
@@ -369,7 +369,7 @@
       "columns": [
         "Typical agency",
         "Freelancer",
-        "Novaframe"
+        "WebXstudio"
       ],
       "rows": [
         {
@@ -494,7 +494,7 @@
     "legal": {
       "privacy": {
         "updated": "19 October 2026",
-        "intro": "This policy explains what information Novaframe Studio collects through this website, why we collect it and the control you keep over it. We collect the minimum needed to respond to a business enquiry.",
+        "intro": "This policy explains what information WebXstudio collects through this website, why we collect it and the control you keep over it. We collect the minimum needed to respond to a business enquiry.",
         "sections": [
           {
             "heading": "Information we collect",
@@ -1256,7 +1256,7 @@
         "photo": "/team/afzal-hussain.jpg",
         "location": "New Delhi, India",
         "focus": "Full-stack product engineering — React, Next.js, Node.js",
-        "bio": "Afzal builds the products Novaframe ships. He learned by shipping software that has to stay up — which is why his work has cache layers, retry logic, worker queues and admin screens rather than just a pretty landing page. His flagship build, eShopper, runs Razorpay payments, 16 data models, Redis caching and live order updates over Socket.IO.",
+        "bio": "Afzal builds the products WebXstudio ships. He learned by shipping software that has to stay up — which is why his work has cache layers, retry logic, worker queues and admin screens rather than just a pretty landing page. His flagship build, eShopper, runs Razorpay payments, 16 data models, Redis caching and live order updates over Socket.IO.",
         "quote": "Ask me about any file in any of our repositories, and I'll walk you through the decision behind it.",
         "skills": [
           "React",
@@ -1943,7 +1943,7 @@
       {
         "id": "studio",
         "year": "2026",
-        "title": "Novaframe Studio opens",
+        "title": "WebXstudio opens",
         "place": "New Delhi · Worldwide",
         "desc": "The same production standard — now offered to founders and businesses that want software built properly."
       }
@@ -2062,7 +2062,7 @@
       {
         "id": "what-production-ready-actually-means",
         "title": "What 'production-ready' actually means when we say it",
-        "excerpt": "Validation, monitoring, graceful fallbacks and a handover you can run without us. The checklist every Novaframe project must pass before we call it done.",
+        "excerpt": "Validation, monitoring, graceful fallbacks and a handover you can run without us. The checklist every WebXstudio project must pass before we call it done.",
         "category": "Studio",
         "date": "2026-10-06",
         "readTime": "5 min read",

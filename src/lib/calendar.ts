@@ -74,11 +74,11 @@ export function buildIcs(opts: {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Novaframe Studio//Booking//EN",
+    "PRODID:-//WebXstudio//Booking//EN",
     "CALSCALE:GREGORIAN",
     `METHOD:${opts.method ?? "PUBLISH"}`,
     "BEGIN:VEVENT",
-    `UID:${opts.uid}@novaframe`,
+    `UID:${opts.uid}@webxstudio`,
     `DTSTAMP:${icsStamp(new Date())}`,
     `DTSTART:${icsStamp(opts.start)}`,
     `DTEND:${icsStamp(end)}`,

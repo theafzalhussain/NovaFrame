@@ -40,7 +40,7 @@ export default function NotFoundPage({ path }: { path: string }) {
     <section className="relative overflow-hidden pt-44 pb-32">
       <div className="grid-lines absolute inset-0 opacity-60" aria-hidden />
       <div className="shell relative text-center">
-        <Seal size={140} className="mx-auto" text="PAGE NOT FOUND · 404 · NOVAFRAME · " />
+        <Seal size={140} className="mx-auto" text="PAGE NOT FOUND · 404 · WEBXSTUDIO · " />
         <h1 className="display mt-10 text-[3rem] leading-none sm:text-7xl">
           This page has <span className="serif-accent text-gold">wandered off.</span>
         </h1>

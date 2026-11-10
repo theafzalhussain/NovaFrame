@@ -408,7 +408,7 @@ function WhyUs() {
         <Reveal>
           <SectionHeading
             index="03"
-            eyebrow="Why Novaframe"
+            eyebrow="Why WebXstudio"
             title="Agency-grade craft."
             highlight="Founder-level accountability."
             description="We sit between slow, expensive agencies and unpredictable freelancers: clean engineering, direct access to the person building it, and pricing a growing business can plan around."

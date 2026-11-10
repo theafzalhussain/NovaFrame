@@ -7,7 +7,7 @@
 # disk and the database survives every restart, redeploy and free-tier sleep.
 services:
   - type: web
-    name: novaframe
+    name: webxstudio
     runtime: node
     plan: free
     region: singapore # closest to India; change if you prefer

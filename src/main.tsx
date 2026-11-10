@@ -1,12 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import "./lib/legacyKeys";
 import "./index.css";
 import App from "./App";
 
 // A page's code file failed to load. If we're online, a new deploy most likely replaced the files this
 // tab was built against — reload once to pick up the new build. (Offline, the page shows a retry button.)
 window.addEventListener("vite:preloadError", () => {
-  const key = "nf_chunk_reload";
+  const key = "wx_chunk_reload";
   try {
     if (!navigator.onLine || sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");

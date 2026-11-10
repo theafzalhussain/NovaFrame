@@ -1,9 +1,9 @@
 -- ==================================================================
--- Novaframe Studio — MySQL 5.7+/8.0 schema (PHP edition of the API)
+-- WebXstudio — MySQL 5.7+/8.0 schema (PHP edition of the API)
 -- Mirrors server/db.ts (SQLite).
 --
 -- 1. Create an empty database (cPanel → MySQL Databases, or
---      CREATE DATABASE novaframe CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;)
+--      CREATE DATABASE webxstudio CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;)
 -- 2. Import this file INTO that database:
 --      mysql -u <user> -p <database> < server/php/schema.sql
 --    or phpMyAdmin → select the database → Import.

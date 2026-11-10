@@ -91,7 +91,7 @@ function fromHeader(settings: SiteSettings) {
 export async function verifyMail(): Promise<{ ok: boolean; error?: string }> {
   if (brevoEnabled()) {
     if (!process.env.MAIL_FROM) {
-      return { ok: true, error: "MAIL_FROM not set — set it to a Brevo-verified sender (e.g. \"Novaframe Studio <you@yourdomain.com>\")." };
+      return { ok: true, error: "MAIL_FROM not set — set it to a Brevo-verified sender (e.g. \"WebXstudio <you@yourdomain.com>\")." };
     }
     return { ok: true };
   }
@@ -767,7 +767,7 @@ export function bookingEmails(b: BookingMail, ctx: MailContext) {
       footerNote: `You're receiving this email because you booked a call on the ${settings.name} website.`,
     },
     ctx,
-    { filename: "novaframe-strategy-call.ics", method: "PUBLISH", content: ics },
+    { filename: "webxstudio-strategy-call.ics", method: "PUBLISH", content: ics },
   );
 
   return { studio, client };

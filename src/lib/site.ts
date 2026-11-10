@@ -122,7 +122,7 @@ export function budgetForAmount(advanced: AdvancedSettings, amount: number) {
 /* ------------------------------------------------------------------ */
 /* Brief draft hand-off (estimator → contact form)                    */
 /* ------------------------------------------------------------------ */
-const BRIEF_KEY = "nf_brief_draft";
+const BRIEF_KEY = "wx_brief_draft";
 
 export type BriefDraft = { service?: string; budget?: string; timeline?: string; details?: string; source?: string };
 

@@ -12,7 +12,7 @@ import { COLLECTION_NAMES, type CollectionName, type Collections, type SiteConte
 import { api, isDemoSession } from "./api";
 import { localContentModified, localContentSnapshot } from "./localApi";
 
-const CACHE_KEY = "nf_content_cache_v2";
+const CACHE_KEY = "wx_content_cache_v2";
 
 export type ContentSource = "defaults" | "cache" | "live" | "local";
 type ContentValue = SiteContent & { source: ContentSource; refresh: () => Promise<void> };
@@ -117,16 +117,16 @@ export function ContentProvider({ children }: { children: ReactNode }) {
     void refresh();
     const onUpdate = () => void refresh();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === CACHE_KEY || e.key?.startsWith("nf_local_content")) void refresh();
+      if (e.key === CACHE_KEY || e.key?.startsWith("wx_local_content")) void refresh();
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") void refresh();
     };
-    window.addEventListener("nf:content-updated", onUpdate);
+    window.addEventListener("wx:content-updated", onUpdate);
     window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.removeEventListener("nf:content-updated", onUpdate);
+      window.removeEventListener("wx:content-updated", onUpdate);
       window.removeEventListener("storage", onStorage);
       document.removeEventListener("visibilitychange", onVisible);
     };

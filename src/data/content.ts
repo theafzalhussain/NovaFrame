@@ -1,5 +1,5 @@
 /* ================================================================
-   Novaframe Studio — default content
+   WebXstudio — default content
    ----------------------------------------------------------------
    These are the seed values. On first run the API copies them into
    the database; after that every section is edited from /#/admin.
@@ -22,18 +22,18 @@ import type {
 } from "./types";
 
 export const siteSettings: SiteSettings = {
-  name: "Novaframe Studio",
-  legal: "Novaframe Studio",
-  short: "Novaframe",
+  name: "WebXstudio",
+  legal: "WebXstudio",
+  short: "WebXstudio",
   tagline: "Digital products, engineered to perform.",
   description:
-    "Novaframe is a founder-led digital studio in New Delhi. We design and engineer fast websites, web apps, online stores and PWAs — on the same React, Next.js and Node.js stack behind five live products you can open today.",
+    "WebXstudio is a founder-led digital studio in New Delhi. We design and engineer fast websites, web apps, online stores and PWAs — on the same React, Next.js and Node.js stack behind five live products you can open today.",
   founded: "2026",
 
   email: "theafzalhussain786@gmail.com",
   phone: "+91 84478 59784",
   whatsapp: "918447859784",
-  whatsappMessage: "Hi Novaframe! I'd like to discuss a project.",
+  whatsappMessage: "Hi WebXstudio! I'd like to discuss a project.",
 
   location: "New Delhi, India · Working worldwide",
   city: "New Delhi",
@@ -544,7 +544,7 @@ export const team: TeamMember[] = [
     photo: "/team/afzal-hussain.jpg",
     location: "New Delhi, India",
     focus: "Full-stack product engineering — React, Next.js, Node.js",
-    bio: "Afzal builds the products Novaframe ships. He learned by shipping software that has to stay up — which is why his work has cache layers, retry logic, worker queues and admin screens rather than just a pretty landing page. His flagship build, eShopper, runs Razorpay payments, 16 data models, Redis caching and live order updates over Socket.IO.",
+    bio: "Afzal builds the products WebXstudio ships. He learned by shipping software that has to stay up — which is why his work has cache layers, retry logic, worker queues and admin screens rather than just a pretty landing page. His flagship build, eShopper, runs Razorpay payments, 16 data models, Redis caching and live order updates over Socket.IO.",
     quote: "Ask me about any file in any of our repositories, and I'll walk you through the decision behind it.",
     skills: ["React", "Next.js", "TypeScript", "Node.js", "Express", "MongoDB", "Redis", "BullMQ", "Tailwind CSS", "Three.js", "Python"],
     credentials: [
@@ -734,7 +734,7 @@ export const milestones: Milestone[] = [
   { id: "mca", year: "2024", title: "MCA — Computer Applications", place: "IGNOU, New Delhi", desc: "Studying alongside full-time building, after a First Division BCA from Maharshi Dayanand University, Rohtak." },
   { id: "products", year: "2025", title: "Independent product work", place: "New Delhi", desc: "World Explorer and The Chronicle shipped — typed APIs, caching strategy, a bilingual UI and measurable request reduction." },
   { id: "scale", year: "2026", title: "Production scale", place: "New Delhi", desc: "eShopper and MovieZone: payments, background workers, real-time order state, SSR SEO and PWA delivery." },
-  { id: "studio", year: "2026", title: "Novaframe Studio opens", place: "New Delhi · Worldwide", desc: "The same production standard — now offered to founders and businesses that want software built properly." },
+  { id: "studio", year: "2026", title: "WebXstudio opens", place: "New Delhi · Worldwide", desc: "The same production standard — now offered to founders and businesses that want software built properly." },
 ];
 
 /* ------------------------------- Tech stack ----------------------------- */
@@ -840,7 +840,7 @@ export const advancedSettings: AdvancedSettings = {
     rushMultiplier: 1.15,
   },
   comparison: {
-    columns: ["Typical agency", "Freelancer", "Novaframe"],
+    columns: ["Typical agency", "Freelancer", "WebXstudio"],
     rows: [
       { label: "Talk directly to the person building it", values: ["no", "yes", "yes"] },
       { label: "Live products & public code you can inspect", values: ["partial", "partial", "yes"] },
@@ -877,7 +877,7 @@ export const advancedSettings: AdvancedSettings = {
     privacy: {
       updated: "19 October 2026",
       intro:
-        "This policy explains what information Novaframe Studio collects through this website, why we collect it and the control you keep over it. We collect the minimum needed to respond to a business enquiry.",
+        "This policy explains what information WebXstudio collects through this website, why we collect it and the control you keep over it. We collect the minimum needed to respond to a business enquiry.",
       sections: [
         {
           heading: "Information we collect",

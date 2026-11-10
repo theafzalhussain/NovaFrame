@@ -60,7 +60,7 @@ export function SecurityPanel({ user }: { user: AdminUser }) {
   const exportData = async (scope: "content" | "all") => {
     const res = await admin.exportData(scope);
     if (res.ok && res.data) {
-      downloadFile(`novaframe-${scope}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(res.data, null, 2), "application/json");
+      downloadFile(`webxstudio-${scope}-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(res.data, null, 2), "application/json");
       toast("Backup downloaded.", "info");
     } else toast(res.error ?? "Export failed.", "error");
   };

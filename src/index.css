@@ -73,7 +73,7 @@
 }
 
 /* ==================================================================
-   Novaframe Studio — "Noir & Champagne" design system
+   WebXstudio — "Noir & Champagne" design system
    ------------------------------------------------------------------
    Warm obsidian surfaces, champagne-gold accents, editorial serif
    display type. Tokens live in @theme (they generate utilities);
@@ -271,7 +271,7 @@
   }
 
   /* ---------- Ambient backdrop ---------- */
-  .nf-backdrop {
+  .wx-backdrop {
     position: fixed;
     inset: 0;
     z-index: 0;
@@ -286,11 +286,11 @@
   }
   /* The radial gradients are already soft-edged, so no blur filter: a blurred, constantly
      moving layer is re-filtered by the GPU on every frame. */
-  .nf-glow {
+  .wx-glow {
     position: absolute;
     border-radius: 9999px;
   }
-  .nf-glow-a {
+  .wx-glow-a {
     width: 46vmax;
     height: 46vmax;
     right: -14vmax;
@@ -299,7 +299,7 @@
     /* Stepped: ~5 updates a second instead of 60. Each step moves a soft 600px glow by <1px. */
     animation: drift-a 32s steps(160) infinite alternate;
   }
-  .nf-glow-b {
+  .wx-glow-b {
     width: 40vmax;
     height: 40vmax;
     left: -16vmax;
@@ -307,7 +307,7 @@
     background: radial-gradient(closest-side, rgba(162, 120, 58, 0.12), transparent 72%);
     animation: drift-b 38s steps(190) infinite alternate;
   }
-  .nf-lines {
+  .wx-lines {
     position: absolute;
     inset: 0;
     background-image: linear-gradient(90deg, rgba(227, 200, 140, 0.035) 1px, transparent 1px);
@@ -315,7 +315,7 @@
     -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 85%);
     mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 85%);
   }
-  .nf-grain {
+  .wx-grain {
     position: absolute;
     /* 10% bleed covers the ±3.6% jitter of the grain animation (was 50%: a layer 4x the screen) */
     inset: -10%;
@@ -324,7 +324,7 @@
     background-size: 180px 180px;
     animation: grain 9s steps(8) infinite;
   }
-  .nf-vignette {
+  .wx-vignette {
     position: absolute;
     inset: 0;
     background: radial-gradient(ellipse 120% 90% at 50% 35%, transparent 55%, rgba(3, 2, 2, 0.75) 100%);
@@ -1321,11 +1321,11 @@
 /* re-computed on every scrolled frame and is what made phones lag.   */
 /* ------------------------------------------------------------------ */
 @media (hover: none), (pointer: coarse), (max-width: 767px) {
-  .nf-glow,
-  .nf-grain {
+  .wx-glow,
+  .wx-grain {
     animation: none;
   }
-  .nf-grain {
+  .wx-grain {
     inset: 0;
   }
   .text-gold-shine,
@@ -1405,8 +1405,8 @@
   .portrait-frame::after {
     animation: none;
   }
-  .nf-glow,
-  .nf-grain,
+  .wx-glow,
+  .wx-grain,
   .marquee-track,
   .animate-floaty,
   .animate-floaty-slow,

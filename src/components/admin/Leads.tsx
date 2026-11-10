@@ -165,6 +165,7 @@ function LeadDrawer({ id, onClose, onChanged }: { id: number; onClose: () => voi
             ["Service", lead.service],
             ["Budget", lead.budget],
             ["Timeline", lead.timeline || "—"],
+            ...(lead.partner ? [["Referred by (partner)", lead.partner]] : []),
           ].map(([k, v]) => (
             <div key={k} className="bg-ink-900 px-4 py-3">
               <dt className="label text-[9.5px]">{k}</dt>
@@ -306,9 +307,10 @@ export default function Leads({ focusId }: { focusId?: number | null }) {
       priority: l.priority,
       value_inr: l.valueEstimate ?? "",
       source: l.source,
+      partner: l.partner ?? "",
       details: l.details,
     }));
-    downloadFile(`novaframe-leads-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows), "text/csv");
+    downloadFile(`webxstudio-leads-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows), "text/csv");
     toast(`Exported ${rows.length} leads.`, "info");
   };
 

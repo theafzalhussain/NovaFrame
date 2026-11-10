@@ -21,7 +21,9 @@ export type ApiResult<T> = {
 
 const API_BASE = ((import.meta.env?.VITE_API_URL as string | undefined) || "/api").replace(/\/+$/, "");
 const BASE = API_BASE;
-const TOKEN_KEY = "nf_admin_token";
+const TOKEN_KEY = "wx_admin_token";
+const PARTNER_TOKEN_KEY = "wx_partner_token";
+const REFERRAL_KEY = "wx_ref";
 const DEMO_TOKEN = "demo-workspace";
 
 export { API_BASE };
@@ -46,6 +48,67 @@ export function isDemoSession() {
   return getAdminToken() === DEMO_TOKEN;
 }
 
+/* Partner sessions (Student Partner program) are separate from admin sessions. */
+export function getPartnerToken() {
+  try {
+    return localStorage.getItem(PARTNER_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+export function setPartnerToken(token: string) {
+  localStorage.setItem(PARTNER_TOKEN_KEY, token);
+}
+export function clearPartnerToken() {
+  try {
+    localStorage.removeItem(PARTNER_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Referral attribution (?ref=CODE links)                             */
+/* ------------------------------------------------------------------ */
+const REFERRAL_DAYS = 60;
+
+/** The referral code this browser arrived with, if it is still inside the attribution window. */
+export function readReferral(): string | undefined {
+  try {
+    const raw = localStorage.getItem(REFERRAL_KEY);
+    if (!raw) return undefined;
+    const { code, at } = JSON.parse(raw) as { code?: string; at?: number };
+    if (!code || !at || Date.now() - at > REFERRAL_DAYS * 86_400_000) return undefined;
+    return code;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Remembers a referral code (first touch wins) and records the visit once per session. */
+export function captureReferral(value: string | null | undefined) {
+  const code = (value ?? "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,16}$/.test(code)) return;
+  try {
+    if (!readReferral()) localStorage.setItem(REFERRAL_KEY, JSON.stringify({ code, at: Date.now() }));
+    const seenKey = `wx_ref_seen_${code}`;
+    if (sessionStorage.getItem(seenKey)) return;
+    sessionStorage.setItem(seenKey, "1");
+  } catch {
+    /* storage unavailable — still record the click */
+  }
+  const path = window.location.hash.replace(/^#/, "").split("?")[0] || "/";
+  void request("POST", "/partners/click", { code, sid: sessionId(), path, referrer: document.referrer ? hostOfReferrer() : "" }, { fallback: false });
+}
+
+function hostOfReferrer() {
+  try {
+    return new URL(document.referrer).host;
+  } catch {
+    return "";
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Core request                                                       */
 /* ------------------------------------------------------------------ */
@@ -58,12 +121,13 @@ export async function request<T>(
   opts: RequestOptions = {},
 ): Promise<ApiResult<T>> {
   const isAdmin = path.startsWith("/admin");
+  const isPartner = path.startsWith("/partner/");
   if (isAdmin && isDemoSession()) return localApi.handle<T>(method, path, body);
 
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  const token = getAdminToken();
-  if (isAdmin && token) headers.Authorization = `Bearer ${token}`;
+  const token = isPartner ? getPartnerToken() : getAdminToken();
+  if ((isAdmin || isPartner) && token) headers.Authorization = `Bearer ${token}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 8000);
@@ -81,7 +145,11 @@ export async function request<T>(
     const json = (await res.json()) as { ok?: boolean; data?: T; error?: string; errors?: Record<string, string> };
     if (res.status === 401 && isAdmin && token) {
       clearAdminToken();
-      window.dispatchEvent(new Event("nf:auth-expired"));
+      window.dispatchEvent(new Event("wx:auth-expired"));
+    }
+    if ((res.status === 401 || (res.status === 403 && (json as { code?: string }).code === "suspended")) && isPartner && token) {
+      clearPartnerToken();
+      window.dispatchEvent(new CustomEvent("wx:partner-auth-expired", { detail: json.error }));
     }
     return {
       ok: res.ok && json.ok !== false,
@@ -92,7 +160,7 @@ export async function request<T>(
     };
   } catch (err) {
     clearTimeout(timer);
-    if (opts.fallback === false || isAdmin) {
+    if (opts.fallback === false || isAdmin || isPartner) {
       return { ok: false, offline: true, error: "Can't reach the API server.", status: 0 };
     }
     const local = await localApi.handle<T>(method, path, body);
@@ -182,16 +250,19 @@ export const api = {
   health: () => request<{ service: string }>("GET", "/health", undefined, { fallback: false, timeoutMs: 4000 }),
   content: () => request<SiteContent & { version?: string }>("GET", "/content"),
   submitEnquiry: (payload: EnquiryPayload) =>
-    request<{ reference: string; message: string; mail?: boolean }>("POST", "/enquiries", payload),
+    request<{ reference: string; message: string; mail?: boolean }>("POST", "/enquiries", { ...payload, referralCode: readReferral() }),
   availability: (from: string, to: string) =>
     request<{ taken: Record<string, string[]> }>("GET", `/bookings/availability?from=${from}&to=${to}`),
   book: (payload: BookingPayload) =>
-    request<{ reference: string; date: string; time: string; timezone: string; durationMinutes: number; mail?: boolean }>("POST", "/bookings", payload),
+    request<{ reference: string; date: string; time: string; timezone: string; durationMinutes: number; mail?: boolean }>("POST", "/bookings", {
+      ...payload,
+      referralCode: readReferral(),
+    }),
   subscribe: (email: string, source = "footer") =>
     request<{ subscribed: boolean; existing: boolean }>("POST", "/subscribe", { email, source }),
   paymentConfig: () => request<PaymentConfig>("GET", "/payments/config", undefined, { fallback: false, timeoutMs: 6000 }),
   createPaymentOrder: (payload: PaymentOrderPayload) =>
-    request<PaymentOrder>("POST", "/payments/order", payload, { fallback: false, timeoutMs: 15000 }),
+    request<PaymentOrder>("POST", "/payments/order", { ...payload, referralCode: readReferral() }, { fallback: false, timeoutMs: 15000 }),
   verifyPayment: (payload: PaymentVerifyPayload) =>
     request<PaymentReceipt>("POST", "/payments/verify", payload, { fallback: false, timeoutMs: 20000 }),
 };
@@ -201,10 +272,10 @@ export const api = {
 /* ------------------------------------------------------------------ */
 function sessionId() {
   try {
-    let sid = sessionStorage.getItem("nf_sid");
+    let sid = sessionStorage.getItem("wx_sid");
     if (!sid) {
       sid = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      sessionStorage.setItem("nf_sid", sid);
+      sessionStorage.setItem("wx_sid", sid);
     }
     return sid;
   } catch {
@@ -246,6 +317,9 @@ export type Lead = {
   valueEstimate: number | null;
   notes?: string | null;
   source: string;
+  partnerId?: number | null;
+  /** "Name · SP26-XXXXXX" when the lead came through a Student Partner */
+  partner?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -395,5 +469,5 @@ export const admin = {
 
 /** Notify the public site that CMS content changed (same tab). */
 export function notifyContentChanged() {
-  window.dispatchEvent(new Event("nf:content-updated"));
+  window.dispatchEvent(new Event("wx:content-updated"));
 }

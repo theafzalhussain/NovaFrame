@@ -138,7 +138,7 @@ export const insights: Insight[] = [
     id: "what-production-ready-actually-means",
     title: "What 'production-ready' actually means when we say it",
     excerpt:
-      "Validation, monitoring, graceful fallbacks and a handover you can run without us. The checklist every Novaframe project must pass before we call it done.",
+      "Validation, monitoring, graceful fallbacks and a handover you can run without us. The checklist every WebXstudio project must pass before we call it done.",
     category: "Studio",
     date: "2026-10-06",
     readTime: "5 min read",

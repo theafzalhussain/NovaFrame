@@ -6,7 +6,7 @@ import Navbar from "./components/Navbar";
 import QuickDock from "./components/QuickDock";
 import { RouterProvider, useRouter } from "./lib/router";
 import { ContentProvider, useContent } from "./lib/content";
-import { track } from "./lib/api";
+import { captureReferral, track } from "./lib/api";
 import { prefersLowData, whenIdle } from "./lib/idle";
 import { lazyPage } from "./lib/lazyPage";
 import type { SiteContent } from "./data/types";
@@ -21,6 +21,8 @@ const CapabilityDetail = lazyPage(() => import("./pages/CapabilityDetail"));
 const CaseStudyPage = lazyPage(() => import("./pages/CaseStudy"));
 const ConfirmationPage = lazyPage(() => import("./pages/Confirmation"));
 const Contact = lazyPage(() => import("./pages/Contact"));
+const EarnPage = lazyPage(() => import("./pages/Earn"));
+const PartnerPortal = lazyPage(() => import("./pages/PartnerPortal"));
 const InsightsPage = lazyPage(async () => ({ default: (await import("./pages/Insights")).InsightsPage }));
 const InsightArticle = lazyPage(async () => ({ default: (await import("./pages/Insights")).InsightArticle }));
 const LegalPage = lazyPage(() => import("./pages/Legal"));
@@ -33,7 +35,7 @@ const Sitemap = lazyPage(() => import("./pages/Sitemap"));
 const TechStack = lazyPage(() => import("./pages/TechStack"));
 
 /** Public pages in rough order of how often visitors open them (the admin console is never prefetched). */
-const PREFETCH = [Services, Portfolio, CaseStudyPage, Pricing, Contact, BookCallPage, About, CapabilityDetail, InsightsPage, TechStack, ConfirmationPage, PayPage, LegalPage, Sitemap, NotFoundPage];
+const PREFETCH = [Services, Portfolio, CaseStudyPage, Pricing, Contact, BookCallPage, About, EarnPage, CapabilityDetail, InsightsPage, TechStack, ConfirmationPage, PayPage, PartnerPortal, LegalPage, Sitemap, NotFoundPage];
 
 /** Shown only if a page's file is still downloading (e.g. first tap on a slow connection). */
 function RouteFallback() {
@@ -89,6 +91,8 @@ function resolve(path: string, content: SiteContent): { node: ReactNode; title: 
       contact: { node: <Contact />, title: t("Contact — Start a Project") },
       book: { node: <BookCallPage />, title: t("Book a Free 30-Minute Strategy Call") },
       pay: { node: <PayPage />, title: t("Pay Securely Online") },
+      earn: { node: <EarnPage />, title: t("Earn With Us — Student Partner & Campus Ambassador Program") },
+      partner: { node: <PartnerPortal />, title: t("Partner Dashboard") },
       confirmation: { node: <ConfirmationPage />, title: t("Confirmation") },
       privacy: { node: <LegalPage doc="privacy" />, title: t("Privacy Policy") },
       terms: { node: <LegalPage doc="terms" />, title: t("Terms of Service") },
@@ -115,14 +119,21 @@ function resolve(path: string, content: SiteContent): { node: ReactNode; title: 
 }
 
 function Routes() {
-  const { path } = useRouter();
+  const { path, query } = useRouter();
   const content = useContent();
   const isAdmin = path === "/admin" || path === "/portal";
   const { node, title } = resolve(path, content);
+  const ref = query.get("ref");
 
   useEffect(() => {
     document.title = title;
   }, [title]);
+
+  // Student Partner referral links: `#/?ref=CODE` (or `?ref=CODE` before the hash).
+  useEffect(() => {
+    if (isAdmin) return;
+    captureReferral(ref ?? new URLSearchParams(window.location.search).get("ref"));
+  }, [ref, isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) track("page_view");

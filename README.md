@@ -1,6 +1,6 @@
-# Novaframe Studio — website + CMS
+# WebXstudio — website + CMS
 
-The marketing site and client console for **Novaframe Studio**, a founder-led product studio in New Delhi.
+The marketing site and client console for **WebXstudio**, a founder-led product studio in New Delhi.
 It uses a dark "Noir & Champagne" design: gold `#d4ad66` on warm obsidian, set in Fraunces, Manrope and JetBrains Mono.
 Every section of the site is served from a database and is editable in a role-based admin console.
 
@@ -16,16 +16,23 @@ Requires **Node.js 20.12+**.
 
 ```bash
 npm install
-npm run server   # API → http://localhost:4000/api/health
-npm run dev      # site → http://localhost:5173  (proxies /api to :4000)
+npm run dev      # API on :4000 + site on http://localhost:5173 (one command, Ctrl+C stops both)
 ```
 
-Open **http://localhost:5173/#/admin**. The first `npm run server` creates the owner account and prints its login once:
+The site reads everything from the API, so both have to be running. `npm run dev` starts them together;
+if the API is already running in another terminal it starts only the web server. To run them apart:
+
+```bash
+npm run server   # API → http://localhost:4000/api/health
+npm run dev:web  # site → http://localhost:5173  (proxies /api to :4000)
+```
+
+Open **http://localhost:5173/#/admin**. The first API start creates the owner account and prints its login once:
 
 ```
 +----------------------------------------------------------+
 |  Owner account created for the admin console             |
-|  Email:    admin@novaframe.studio                        |
+|  Email:    admin@webxstudio.me                           |
 |  Password: <generated>                                   |
 +----------------------------------------------------------+
 ```
@@ -46,12 +53,15 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Vite dev server on :5173. `/api` is proxied to `API_PROXY_TARGET` (default `http://localhost:4000`) |
+| `npm run dev` | API + Vite dev server together (:4000 and :5173). Ctrl+C stops both |
+| `npm run dev:web` | Only the Vite dev server. `/api` is proxied to `API_PROXY_TARGET` (default `http://localhost:4000`) |
 | `npm run server` / `server:watch` | Node API on `PORT` (default 4000); the watch variant reloads on change |
 | `npm run build` | Production build → `dist/`: `index.html`, content-hashed, code-split files in `dist/assets/`, plus `public/` (fonts, images) |
 | `npm run preview` | Serve the build locally (also proxies `/api`) |
 | `npm start` | Build, then serve site **and** API from one Node process on `PORT` |
 | `npm run typecheck` | Strict TypeScript check for the web app and the server |
+| `npm run test:partners` | End-to-end check of the Student Partner program on a throwaway database |
+| `npm run test:rebrand` | Verifies the one-time Novaframe → WebXstudio rename of stored content |
 | `npm run admin:reset -- --email … --password …` | Create an owner, or reset a password and sign out its sessions |
 | `npm run turso:push` | One-time copy of the local SQLite file into the Turso database (`-- --from=path.db` for another file) |
 | `npm run mail:test` | Log in to SMTP and send one sample of every email template to `NOTIFY_EMAIL` |
@@ -62,7 +72,7 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 ## What's inside
 
 **Website** (hash routes):
-- Pages: `/` · `/services` and `/services/:id` · `/work` and `/work/:id` (case studies) · `/pricing` · `/studio` · `/tech-stack` · `/insights` and `/insights/:id` · `/contact` · `/book` · `/pay` · `/confirmation` · `/privacy` · `/terms` · `/sitemap`
+- Pages: `/` · `/services` and `/services/:id` · `/work` and `/work/:id` (case studies) · `/pricing` · `/studio` · `/tech-stack` · `/insights` and `/insights/:id` · `/contact` · `/book` · `/pay` · `/earn` (Student Partner program) · `/partner` (partner dashboard) · `/confirmation` · `/privacy` · `/terms` · `/sitemap`
 - Unknown paths show a helpful 404.
 - **Real work:** eShopper, MovieZone, The Chronicle, World Explorer, the founder portfolio and SAARTHI, with live links, repos and screenshots.
 - **Conversion tools:**
@@ -104,7 +114,7 @@ Copy `.env.example` → `.env` (git-ignored; `server/.env` also works). Every va
 | `PORT` | `4000` | API port |
 | `TURSO_DATABASE_URL` | — | Hosted libSQL database (`libsql://….turso.io`). Set in production; leave empty to use a local file |
 | `TURSO_AUTH_TOKEN` | — | Token for the Turso database |
-| `DB_PATH` | `server/novaframe.db` | Local SQLite file, used only when `TURSO_DATABASE_URL` is empty |
+| `DB_PATH` | `server/webxstudio.db` | Local SQLite file, used only when `TURSO_DATABASE_URL` is empty |
 | `CORS_ORIGIN` | *(any origin)* | Comma-separated list of sites allowed to call the API |
 | `TRUST_PROXY` | private ranges | Set `1` behind one reverse proxy so rate limits and logs see real IPs |
 | `SESSION_DAYS` | `7` | Admin session lifetime |
@@ -118,7 +128,7 @@ Copy `.env.example` → `.env` (git-ignored; `server/.env` also works). Every va
 | `RAZORPAY_WEBHOOK_SECRET` | — | Optional. Enables `POST /api/payments/webhook` (see below) |
 | `SITE_URL` | — | Public site URL, used for "Book a call" and admin links inside emails |
 | `VITE_API_URL` | `/api` | Build-time API URL when the API is on another domain |
-| `API_PROXY_TARGET` | `http://localhost:4000` | Where `npm run dev` / `preview` proxy `/api` |
+| `API_PROXY_TARGET` | `http://localhost:4000` | Where `npm run dev:web` / `preview` proxy `/api`. `npm run dev` sets it from `PORT` |
 
 **Email:** with `SMTP_HOST` set, each new enquiry, booked call or payment sends you an alert (Reply-To is the client) and sends the client a branded confirmation — call bookings include a calendar invite, payments an official receipt.
 Sending runs in the background; a failed send is logged and never blocks the form. The server checks the SMTP login at start-up and logs the reason if it fails.
@@ -156,11 +166,17 @@ redeploys and free-tier sleep. `render.yaml` deploys exactly this as a Render Bl
 To carry your local data over to Turso once:
 
 ```bash
-npm run turso:push          # copies server/novaframe.db → the Turso database
+npm run turso:push          # copies server/webxstudio.db → the Turso database
 ```
 
 Without `TURSO_DATABASE_URL`, the server falls back to a local SQLite file (`DB_PATH`), which is what
 `npm run server` uses in development.
+
+> **Renamed from Novaframe Studio.** On first boot after the rename the server rewrites the old studio
+> name inside the site settings and the CMS collections — admin edits are kept, and leads, bookings and
+> payments are left untouched (`renameBrand()` in `server/db.ts`, covered by `npm run test:rebrand`).
+> A local `server/novaframe.db` also keeps being used when no `webxstudio.db` sits beside it, so no data
+> is orphaned. Remember to update `MAIL_FROM` and `ADMIN_EMAIL` wherever they are set in production.
 
 **B. Static site + separate API.** Build with `VITE_API_URL=https://api.your-domain.com/api npm run build` and upload `dist/` to any static host.
 Run the API anywhere, with `CORS_ORIGIN=https://your-domain.com`.

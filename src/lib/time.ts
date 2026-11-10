@@ -8,7 +8,7 @@ export function downloadIcs(opts: { title: string; start: Date; minutes: number;
   const url = URL.createObjectURL(new Blob([body], { type: "text/calendar" }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = "novaframe-discovery-call.ics";
+  a.download = "webxstudio-discovery-call.ics";
   document.body.appendChild(a);
   a.click();
   a.remove();

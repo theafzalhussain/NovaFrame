@@ -27,10 +27,10 @@ export default function CommandPalette() {
     };
     const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    window.addEventListener("nf:palette", onOpen);
+    window.addEventListener("wx:palette", onOpen);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("nf:palette", onOpen);
+      window.removeEventListener("wx:palette", onOpen);
     };
   }, []);
 
@@ -55,6 +55,8 @@ export default function CommandPalette() {
       { id: "home", label: "Home", hint: "Page", icon: "home", run: go("/") },
       ...navLinks.map((l) => ({ id: `nav-${l.to}`, label: l.label, hint: "Page", icon: "arrow", run: go(l.to) })),
       { id: "tech", label: "Tech stack", hint: "Page", icon: "cpu", run: go("/tech-stack") },
+      { id: "earn", label: "Earn With Us — Student Partner program", hint: "Page", icon: "rupee", keywords: "refer referral commission campus ambassador student income affiliate", run: go("/earn") },
+      { id: "partner", label: "Partner dashboard", hint: "Page", icon: "user", keywords: "partner login wallet payout referral link", run: go("/partner") },
       { id: "book", label: "Book a free 30-min call", hint: "Action", icon: "calendar", keywords: "meeting schedule discovery consultation", run: go("/book") },
       { id: "pay", label: "Make a payment", hint: "Action", icon: "lock", keywords: "pay invoice advance milestone razorpay upi card", run: go("/pay") },
       {

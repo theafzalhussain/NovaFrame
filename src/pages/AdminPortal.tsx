@@ -7,17 +7,35 @@ import Bookings from "../components/admin/Bookings";
 import CollectionManager from "../components/admin/CollectionManager";
 import Dashboard from "../components/admin/Dashboard";
 import Leads from "../components/admin/Leads";
+import { AmbassadorsPanel, ClientPaymentsPanel, PayoutsPanel } from "../components/admin/PartnerOps";
+import { PartnerLeadsPanel, PartnersPanel } from "../components/admin/PartnerProgram";
 import { ActivityLog, SecurityPanel } from "../components/admin/Security";
 import { AdvancedPanel, SiteSettingsPanel } from "../components/admin/SettingsPanel";
 import Subscribers from "../components/admin/Subscribers";
 import { CONTENT_NAV, schemas } from "../components/admin/schemas";
 import type { AdminRole, CollectionName } from "../data/types";
 import { admin, api, clearAdminToken, getAdminToken, isDemoSession, type AdminUser } from "../lib/api";
+import { partnerAdmin } from "../lib/partner";
 import { useContent } from "../lib/content";
 import { useRouter } from "../lib/router";
 import { cn } from "../utils/cn";
 
-type Section = "dashboard" | "analytics" | "leads" | "bookings" | "subscribers" | "content" | "settings" | "advanced" | "security" | "activity";
+type Section =
+  | "dashboard"
+  | "analytics"
+  | "leads"
+  | "bookings"
+  | "subscribers"
+  | "partners"
+  | "partnerLeads"
+  | "partnerPayments"
+  | "partnerPayouts"
+  | "ambassadors"
+  | "content"
+  | "settings"
+  | "advanced"
+  | "security"
+  | "activity";
 
 const RANK: Record<AdminRole, number> = { editor: 1, admin: 2, owner: 3 };
 const SECTION_ROLE: Record<Section, AdminRole> = {
@@ -26,6 +44,11 @@ const SECTION_ROLE: Record<Section, AdminRole> = {
   leads: "admin",
   bookings: "admin",
   subscribers: "admin",
+  partners: "admin",
+  partnerLeads: "admin",
+  partnerPayments: "admin",
+  partnerPayouts: "admin",
+  ambassadors: "admin",
   content: "editor",
   settings: "admin",
   advanced: "admin",
@@ -71,9 +94,9 @@ function Login({ onAuthed }: { onAuthed: (u: AdminUser) => void }) {
 
   return (
     <div className="relative grid min-h-screen bg-ink-950 lg:grid-cols-[1.05fr_0.95fr]">
-      <div className="nf-backdrop" aria-hidden>
-        <div className="nf-glow nf-glow-a" />
-        <div className="nf-grain" />
+      <div className="wx-backdrop" aria-hidden>
+        <div className="wx-glow wx-glow-a" />
+        <div className="wx-grain" />
       </div>
 
       <aside className="relative hidden overflow-hidden border-r border-gold-300/10 lg:flex lg:flex-col lg:justify-between lg:p-14">
@@ -197,6 +220,7 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
   const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [newLeads, setNewLeads] = useState(0);
+  const [partnerTodo, setPartnerTodo] = useState({ payments: 0, payouts: 0, applications: 0 });
   const demo = isDemoSession();
   const role = user.role;
   const can = (s: Section) => RANK[role] >= RANK[SECTION_ROLE[s]];
@@ -221,6 +245,14 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
   useEffect(() => {
     if (!can("leads")) return;
     void admin.leads().then((res) => res.ok && setNewLeads((res.data ?? []).filter((l) => l.status === "new").length));
+    if (!demo) {
+      void partnerAdmin.overview().then(
+        (res) =>
+          res.ok &&
+          res.data &&
+          setPartnerTodo({ payments: res.data.kpis.pendingPayments, payouts: res.data.kpis.payoutsRequested, applications: res.data.kpis.pendingApplications }),
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section]);
 
@@ -229,8 +261,8 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
       toast("Your session expired — please sign in again.", "error");
       onLogout();
     };
-    window.addEventListener("nf:auth-expired", expired);
-    return () => window.removeEventListener("nf:auth-expired", expired);
+    window.addEventListener("wx:auth-expired", expired);
+    return () => window.removeEventListener("wx:auth-expired", expired);
   }, [onLogout, toast]);
 
   const groups: { title: string; items: { s: Section; c?: CollectionName; label: string; icon: string; badge?: number }[] }[] = [
@@ -247,6 +279,16 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
         { s: "leads", label: "Leads", icon: "inbox", badge: newLeads },
         { s: "bookings", label: "Call bookings", icon: "calendar" },
         { s: "subscribers", label: "Subscribers", icon: "mail" },
+      ],
+    },
+    {
+      title: "Partner program",
+      items: [
+        { s: "partners", label: "Partners", icon: "users" },
+        { s: "partnerLeads", label: "Partner leads", icon: "link" },
+        { s: "partnerPayments", label: "Client payments", icon: "rupee", badge: partnerTodo.payments },
+        { s: "partnerPayouts", label: "Payouts", icon: "download", badge: partnerTodo.payouts },
+        { s: "ambassadors", label: "Campus Ambassadors", icon: "award", badge: partnerTodo.applications },
       ],
     },
     {
@@ -370,6 +412,11 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
           {section === "leads" ? <Leads focusId={focusId} /> : null}
           {section === "bookings" ? <Bookings openLead={(id) => go("leads", String(id))} /> : null}
           {section === "subscribers" ? <Subscribers /> : null}
+          {section === "partners" ? <PartnersPanel /> : null}
+          {section === "partnerLeads" ? <PartnerLeadsPanel openLead={(id) => go("leads", String(id))} /> : null}
+          {section === "partnerPayments" ? <ClientPaymentsPanel user={user} /> : null}
+          {section === "partnerPayouts" ? <PayoutsPanel /> : null}
+          {section === "ambassadors" ? <AmbassadorsPanel /> : null}
           {section === "content" ? <CollectionManager key={collection} name={collection} canReset={RANK[role] >= RANK.admin} /> : null}
           {section === "settings" ? <SiteSettingsPanel /> : null}
           {section === "advanced" ? <AdvancedPanel canEdit={RANK[role] >= RANK.admin} /> : null}

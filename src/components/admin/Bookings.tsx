@@ -70,7 +70,7 @@ export default function Bookings({ openLead }: { openLead: (id: number) => void 
               type="button"
               className="btn btn-line btn-sm"
               disabled={!list?.length}
-              onClick={() => downloadFile("novaframe-bookings.csv", toCsv((list ?? []).map((b) => ({ reference: b.reference, date: b.date, time: b.time, name: b.name, email: b.email, phone: b.phone ?? "", topic: b.topic, status: b.status }))), "text/csv")}
+              onClick={() => downloadFile("webxstudio-bookings.csv", toCsv((list ?? []).map((b) => ({ reference: b.reference, date: b.date, time: b.time, name: b.name, email: b.email, phone: b.phone ?? "", topic: b.topic, status: b.status }))), "text/csv")}
             >
               <Icon name="download" className="h-4 w-4" /> Export
             </button>

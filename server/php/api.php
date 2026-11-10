@@ -1,6 +1,6 @@
 <?php
 /**
- * Novaframe Studio — PHP 8 + MySQL edition of the API
+ * WebXstudio — PHP 8 + MySQL edition of the API
  * ===================================================
  * Same contract as server/index.ts (Express + SQLite), so the React site and
  * admin console work unchanged on shared hosting (cPanel / Hostinger / Apache).
@@ -227,6 +227,36 @@ function top_up_defaults(): void
         write_setting('seeded_items', $offered);
     }
 }
+/**
+ * One-time rebrand: Novaframe Studio -> WebXstudio. Editorial rows only, so admin
+ * edits survive and customer records are untouched. Mirror of renameBrand() in
+ * server/db.ts; runs once per database.
+ */
+function rename_brand(): void
+{
+    if (read_setting('rebrand_webxstudio') !== null) {
+        return;
+    }
+    // Longest tokens first, so "Novaframe Studio" never becomes "WebXstudio Studio".
+    $swap = static function (string $column): string {
+        $tokens = [
+            ['novaframe.studio', 'webxstudio.me'],
+            ['Novaframe Studio', 'WebXstudio'],
+            ['NOVAFRAME STUDIO', 'WEBXSTUDIO'],
+            ['Novaframe', 'WebXstudio'],
+            ['NOVAFRAME', 'WEBXSTUDIO'],
+            ['novaframe', 'webxstudio'],
+        ];
+        foreach ($tokens as [$from, $to]) {
+            $column = "REPLACE($column, '$from', '$to')";
+        }
+        return $column;
+    };
+    q('UPDATE content SET data = ' . $swap('data') . ", updated_at = UTC_TIMESTAMP() WHERE data LIKE '%ovaframe%'");
+    q('UPDATE settings SET value = ' . $swap('value') . ", updated_at = UTC_TIMESTAMP()
+       WHERE setting_key IN ('site', 'advanced') AND value LIKE '%ovaframe%'");
+    write_setting('rebrand_webxstudio', ['at' => gmdate('c')]);
+}
 function ensure_seeded(): void
 {
     $seeded = read_setting('seeded_collections');
@@ -253,6 +283,7 @@ function ensure_seeded(): void
     if (read_setting('advanced') === null) {
         write_setting('advanced', seed()['advanced'] ?? []);
     }
+    rename_brand();
     $admins = (int) (one('SELECT count(*) AS c FROM admin_users')['c'] ?? 0);
     $password = (string) env('ADMIN_PASSWORD');
     if ($admins === 0 && strlen($password) >= 10) {
@@ -469,7 +500,7 @@ try {
     dispatch($method, $route, $body);
     fail(404, 'Route not found.');
 } catch (Throwable $e) {
-    error_log('[novaframe-api] ' . $e->getMessage());
+    error_log('[webxstudio-api] ' . $e->getMessage());
     if (str_contains($e->getMessage(), 'Duplicate entry') && str_contains($e->getMessage(), 'active_slot')) {
         fail(409, 'That slot was just taken — please pick another time.', ['errors' => ['time' => 'Slot taken']]);
     }
@@ -486,7 +517,7 @@ function dispatch(string $method, string $route, array $b): void
     /* -------------------------- Public -------------------------- */
     if ($route === '/health' && $method === 'GET') {
         $c = (int) (one('SELECT count(*) AS c FROM content')['c'] ?? 0);
-        ok(['service' => 'novaframe-php-api', 'database' => 'mysql', 'contentItems' => $c, 'time' => gmdate('c')]);
+        ok(['service' => 'webxstudio-php-api', 'database' => 'mysql', 'contentItems' => $c, 'time' => gmdate('c')]);
     }
 
     if ($route === '/content' && $method === 'GET') {
@@ -1261,7 +1292,7 @@ function dispatch(string $method, string $route, array $b): void
             $payload['subscribers'] = all_rows('SELECT email, source, created_at FROM subscribers');
         }
         audit('EXPORT', 'EXPORT_' . strtoupper($scope));
-        header('Content-Disposition: attachment; filename="novaframe-' . $scope . '-' . gmdate('Y-m-d') . '.json"');
+        header('Content-Disposition: attachment; filename="webxstudio-' . $scope . '-' . gmdate('Y-m-d') . '.json"');
         ok($payload);
     }
 }

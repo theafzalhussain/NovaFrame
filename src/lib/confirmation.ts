@@ -48,7 +48,7 @@ export type PaymentConfirmation = Base & {
 export type Confirmation = EnquiryConfirmation | BookingConfirmation | PaymentConfirmation;
 export type ConfirmationKind = Confirmation["kind"];
 
-const KEY = "nf_confirmation_v1";
+const KEY = "wx_confirmation_v1";
 const KINDS: ConfirmationKind[] = ["enquiry", "booking", "payment"];
 let memory: Confirmation | null = null;
 

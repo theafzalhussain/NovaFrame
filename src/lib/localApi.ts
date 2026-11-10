@@ -10,13 +10,13 @@ import { cloneDefaults, defaultContent } from "../data/defaults";
 import type { ApiResult, Booking, ContentEntry, Lead, LeadActivity } from "./api";
 
 const KEYS = {
-  content: "nf_local_content_v2",
-  leads: "nf_local_leads_v2",
-  notes: "nf_local_lead_notes_v2",
-  bookings: "nf_local_bookings_v2",
-  subscribers: "nf_local_subscribers_v2",
-  events: "nf_local_events_v2",
-  audit: "nf_local_audit_v2",
+  content: "wx_local_content_v2",
+  leads: "wx_local_leads_v2",
+  notes: "wx_local_lead_notes_v2",
+  bookings: "wx_local_bookings_v2",
+  subscribers: "wx_local_subscribers_v2",
+  events: "wx_local_events_v2",
+  audit: "wx_local_audit_v2",
 };
 
 type LocalStore = {
@@ -132,9 +132,9 @@ async function handle<T>(method: string, fullPath: string, body?: unknown): Prom
   if (path === "/content" && method === "GET") return okR(localContentSnapshot() as T);
 
   if (path === "/enquiries" && method === "POST") {
-    if (s(b.website)) return okR({ reference: ref("NF") } as T, 201);
+    if (s(b.website)) return okR({ reference: ref("WX") } as T, 201);
     const leads = read<Lead[]>(KEYS.leads, []);
-    const reference = ref("NF");
+    const reference = ref("WX");
     const budget = s(b.budget, 80) || "Not specified";
     leads.unshift({
       id: Date.now(),
@@ -174,13 +174,13 @@ async function handle<T>(method: string, fullPath: string, body?: unknown): Prom
     if (bookings.some((x) => x.date === date && x.time === time && (x.status === "scheduled" || x.status === "confirmed"))) {
       return failR(409, "That slot was just taken — please pick another time.");
     }
-    const reference = ref("NFC");
+    const reference = ref("WXC");
     const leadId = Date.now();
     const site = store().settings.site;
     const leads = read<Lead[]>(KEYS.leads, []);
     leads.unshift({
       id: leadId,
-      reference: ref("NF"),
+      reference: ref("WX"),
       name: s(b.name, 120),
       companyName: s(b.companyName, 160),
       email: s(b.email, 160).toLowerCase(),

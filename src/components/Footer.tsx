@@ -80,6 +80,7 @@ export default function Footer() {
     { label: "Insights", to: "/insights" },
     { label: "Contact", to: "/contact" },
     { label: "Pay online", to: "/pay" },
+    { label: "Earn with us", to: "/earn" },
   ];
 
   return (

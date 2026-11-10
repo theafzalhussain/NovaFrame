@@ -1,5 +1,5 @@
 {
-  "name": "novaframe-studio",
+  "name": "webxstudio",
   "private": true,
   "version": "2.0.0",
   "type": "module",
@@ -7,7 +7,8 @@
     "node": "26.x"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
     "server": "tsx server/index.ts",
     "server:watch": "tsx watch server/index.ts",
     "admin:reset": "tsx server/reset-admin.ts",
@@ -19,6 +20,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p server",
+    "test:partners": "tsx server/partners.test.ts",
+    "test:rebrand": "tsx server/rebrand.test.ts",
     "start": "npm run build && tsx server/index.ts",
     "start:prod": "tsx server/index.ts"
   },

@@ -19,6 +19,8 @@ export default function Sitemap() {
         { label: "Contact", to: "/contact" },
         { label: "Book a call", to: "/book" },
         { label: "Pay online", to: "/pay" },
+        { label: "Earn With Us (Student Partners)", to: "/earn" },
+        { label: "Partner dashboard", to: "/partner" },
       ],
     },
     { title: "Services", links: collections.services.map((s) => ({ label: s.title, to: `/services/${s.id}` })) },

@@ -1,5 +1,5 @@
 /**
- * Novaframe Studio — SQLite / libSQL data layer
+ * WebXstudio — SQLite / libSQL data layer
  * ----------------------------------------------
  * Relational tables for transactional data (leads, bookings, users,
  * sessions, audit, analytics) and a document table for editorial
@@ -18,7 +18,19 @@ import { COLLECTION_NAMES, type CollectionName } from "../src/data/types.js";
 import { defaultContent } from "../src/data/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "novaframe.db");
+
+/**
+ * Local file backend. The studio was renamed from Novaframe to WebXstudio, so an
+ * existing novaframe.db is still used when there is no webxstudio.db beside it —
+ * otherwise the rename would quietly start an empty database and orphan the data.
+ */
+function localDbPath() {
+  if (process.env.DB_PATH) return process.env.DB_PATH;
+  const current = path.join(__dirname, "webxstudio.db");
+  const legacy = path.join(__dirname, "novaframe.db");
+  return !fs.existsSync(current) && fs.existsSync(legacy) ? legacy : current;
+}
+const DB_PATH = localDbPath();
 
 /**
  * In production (TURSO_DATABASE_URL set) the client talks to the hosted
@@ -249,6 +261,179 @@ const SCHEMA_SQL = `
     uploaded_by TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+`;
+
+/* ------------------------------------------------------------------ */
+/* Student Partner & Campus Ambassador program                        */
+/* ------------------------------------------------------------------ */
+/**
+ * Money is integer paise. A partner's wallet is never stored as an editable
+ * number: it is computed from `partner_commissions` (credits, created only
+ * from verified client payments) minus `partner_payouts` (debits). Triggers
+ * below make both tables tamper-resistant at the database level.
+ */
+const PARTNER_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS partners (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_code        TEXT NOT NULL UNIQUE,
+    referral_code       TEXT NOT NULL UNIQUE,
+    full_name           TEXT NOT NULL,
+    email               TEXT NOT NULL UNIQUE,
+    phone               TEXT NOT NULL,
+    password_hash       TEXT NOT NULL,
+    salt                TEXT NOT NULL,
+    college             TEXT NOT NULL,
+    course              TEXT,
+    graduation_year     INTEGER,
+    city                TEXT,
+    region              TEXT NOT NULL,
+    upi_id              TEXT,
+    bank_account_name   TEXT,
+    bank_account_number TEXT,
+    bank_ifsc           TEXT,
+    pan                 TEXT,
+    tier                TEXT NOT NULL DEFAULT 'partner' CHECK (tier IN ('partner','ambassador')),
+    status              TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
+    suspended_reason    TEXT,
+    suspended_at        TEXT,
+    show_on_leaderboard INTEGER NOT NULL DEFAULT 1,
+    flags               TEXT,
+    admin_notes         TEXT,
+    signup_ip           TEXT,
+    signup_ua           TEXT,
+    last_login_at       TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS partner_sessions (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash   TEXT NOT NULL UNIQUE,
+    partner_id   INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+    ip_address   TEXT,
+    user_agent   TEXT,
+    expires_at   TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS ambassador_applications (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id    INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+    college       TEXT NOT NULL,
+    year_of_study TEXT NOT NULL,
+    motivation    TEXT NOT NULL,
+    reach         TEXT NOT NULL,
+    social_links  TEXT,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    review_note   TEXT,
+    reviewed_by   TEXT,
+    reviewed_at   TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  /* Payments received from clients. Only 'verified' rows earn commission. */
+  CREATE TABLE IF NOT EXISTS client_payments (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference         TEXT NOT NULL UNIQUE,
+    enquiry_id        INTEGER REFERENCES enquiries(id) ON DELETE SET NULL,
+    partner_id        INTEGER REFERENCES partners(id),
+    client_name       TEXT NOT NULL,
+    client_email      TEXT,
+    amount_paise      INTEGER NOT NULL CHECK (amount_paise > 0),
+    currency          TEXT NOT NULL DEFAULT 'INR',
+    installment_label TEXT,
+    method            TEXT,
+    external_ref      TEXT,
+    paid_on           TEXT,
+    source            TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','razorpay')),
+    payment_id        INTEGER UNIQUE REFERENCES payments(id),
+    status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','verified','rejected','refunded')),
+    recorded_by_id    INTEGER,
+    recorded_by       TEXT,
+    verified_by       TEXT,
+    verified_at       TEXT,
+    notes             TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  /* Wallet credits — one per verified client payment, never edited, only reversed. */
+  CREATE TABLE IF NOT EXISTS partner_commissions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id        INTEGER NOT NULL REFERENCES partners(id),
+    client_payment_id INTEGER NOT NULL UNIQUE REFERENCES client_payments(id),
+    enquiry_id        INTEGER,
+    base_paise        INTEGER NOT NULL CHECK (base_paise > 0),
+    rate_bps          INTEGER NOT NULL CHECK (rate_bps > 0 AND rate_bps <= 5000),
+    amount_paise      INTEGER NOT NULL CHECK (amount_paise >= 0),
+    status            TEXT NOT NULL DEFAULT 'earned' CHECK (status IN ('earned','reversed')),
+    available_at      TEXT NOT NULL,
+    reversed_reason   TEXT,
+    reversed_by       TEXT,
+    reversed_at       TEXT,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  /* Wallet debits — withdrawal requests and their settlement. */
+  CREATE TABLE IF NOT EXISTS partner_payouts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference    TEXT NOT NULL UNIQUE,
+    partner_id   INTEGER NOT NULL REFERENCES partners(id),
+    amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+    method       TEXT NOT NULL CHECK (method IN ('upi','bank')),
+    destination  TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'requested' CHECK (status IN ('requested','paid','rejected')),
+    utr          TEXT,
+    note         TEXT,
+    processed_by TEXT,
+    processed_at TEXT,
+    requested_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`;
+
+/** One statement each: trigger bodies contain semicolons, so they never go through executeMultiple. */
+const PARTNER_TRIGGERS = [
+  `CREATE TRIGGER IF NOT EXISTS trg_commission_locked
+   BEFORE UPDATE OF partner_id, client_payment_id, enquiry_id, base_paise, rate_bps, amount_paise, available_at, created_at ON partner_commissions
+   BEGIN SELECT RAISE(ABORT, 'Commission amounts are immutable'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_commission_final
+   BEFORE UPDATE OF status ON partner_commissions WHEN OLD.status = 'reversed'
+   BEGIN SELECT RAISE(ABORT, 'A reversed commission cannot be restored'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_commission_no_delete
+   BEFORE DELETE ON partner_commissions
+   BEGIN SELECT RAISE(ABORT, 'Commissions cannot be deleted - reverse them instead'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_payout_locked
+   BEFORE UPDATE OF partner_id, amount_paise, method, destination, requested_at ON partner_payouts
+   BEGIN SELECT RAISE(ABORT, 'Payout amounts are immutable'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_payout_final
+   BEFORE UPDATE OF status ON partner_payouts WHEN OLD.status IN ('paid','rejected')
+   BEGIN SELECT RAISE(ABORT, 'This payout is already settled'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_payout_no_delete
+   BEFORE DELETE ON partner_payouts
+   BEGIN SELECT RAISE(ABORT, 'Payouts cannot be deleted'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_client_payment_locked
+   BEFORE UPDATE OF amount_paise, partner_id ON client_payments WHEN OLD.status != 'pending'
+   BEGIN SELECT RAISE(ABORT, 'Only pending payments can be edited'); END`,
+  `CREATE TRIGGER IF NOT EXISTS trg_client_payment_no_delete
+   BEFORE DELETE ON client_payments WHEN OLD.status IN ('verified','refunded')
+   BEGIN SELECT RAISE(ABORT, 'Verified payments cannot be deleted - refund them instead'); END`,
+];
+
+const PARTNER_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_enquiries_partner     ON enquiries(partner_id);
+  CREATE INDEX IF NOT EXISTS idx_enquiries_email       ON enquiries(email);
+  CREATE INDEX IF NOT EXISTS idx_partners_college      ON partners(college);
+  CREATE INDEX IF NOT EXISTS idx_partners_region       ON partners(region);
+  CREATE INDEX IF NOT EXISTS idx_partners_status       ON partners(status, tier);
+  CREATE INDEX IF NOT EXISTS idx_partner_sessions      ON partner_sessions(partner_id);
+  CREATE INDEX IF NOT EXISTS idx_amb_apps_partner      ON ambassador_applications(partner_id, status);
+  CREATE INDEX IF NOT EXISTS idx_client_payments_enq   ON client_payments(enquiry_id);
+  CREATE INDEX IF NOT EXISTS idx_client_payments_partner ON client_payments(partner_id, status);
+  CREATE INDEX IF NOT EXISTS idx_commissions_partner   ON partner_commissions(partner_id, status);
+  CREATE INDEX IF NOT EXISTS idx_commissions_enquiry   ON partner_commissions(enquiry_id);
+  CREATE INDEX IF NOT EXISTS idx_payouts_partner       ON partner_payouts(partner_id, status);
 `;
 
 const INDEX_SQL = `
@@ -483,6 +668,53 @@ export async function topUpDefaults(): Promise<string[]> {
   }
   return added;
 }
+
+/* ------------------------------------------------------------------ */
+/* One-time rebrand: Novaframe Studio → WebXstudio                    */
+/* ------------------------------------------------------------------ */
+/**
+ * Site settings and every editorial collection live in this database, so renaming
+ * the studio in the source alone would leave the old name on any database that has
+ * already been seeded or edited in the admin console.
+ *
+ * This rewrites the name inside those two tables only: admin edits are preserved,
+ * and customer records (leads, bookings, payments, partners) are never touched.
+ * Runs once per database, tracked by a marker row.
+ */
+const BRAND_MARKER = "rebrand_webxstudio";
+
+/** Nested SQL replace() over a column. Longest tokens first, so "Novaframe Studio" never becomes "WebXstudio Studio". */
+function swapBrand(column: string) {
+  const tokens: [string, string][] = [
+    ["novaframe.studio", "webxstudio.me"],
+    ["Novaframe Studio", "WebXstudio"],
+    ["NOVAFRAME STUDIO", "WEBXSTUDIO"],
+    ["Novaframe", "WebXstudio"],
+    ["NOVAFRAME", "WEBXSTUDIO"],
+    ["novaframe", "webxstudio"],
+  ];
+  // Fixed literals, so there is nothing here to parameterise or escape.
+  return tokens.reduce((sql, [from, to]) => `replace(${sql}, '${from}', '${to}')`, column);
+}
+
+async function renameBrand(): Promise<void> {
+  if (await get("SELECT 1 AS x FROM settings WHERE key = ?", [BRAND_MARKER])) return;
+  // '%ovaframe%' matches either capitalisation, so nothing is missed.
+  const content = await run(`UPDATE content SET data = ${swapBrand("data")}, updated_at = datetime('now') WHERE data LIKE '%ovaframe%'`);
+  const settings = await run(
+    `UPDATE settings SET value = ${swapBrand("value")}, updated_at = datetime('now')
+     WHERE key IN ('site', 'advanced') AND value LIKE '%ovaframe%'`,
+  );
+  await run(
+    `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    [BRAND_MARKER, JSON.stringify({ at: new Date().toISOString(), content: content.changes, settings: settings.changes })],
+  );
+  if (content.changes || settings.changes) {
+    console.log(`[brand] Renamed to WebXstudio in ${content.changes} content entries and ${settings.changes} settings documents.`);
+  }
+}
+
 let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
 export async function initDb(): Promise<void> {
@@ -526,6 +758,14 @@ export async function initDb(): Promise<void> {
   }
 
   await exec(INDEX_SQL);
+
+  // Partner program. The enquiry columns are added after the rebuild above so it can't drop them.
+  await exec(PARTNER_SCHEMA_SQL);
+  await addColumn("enquiries", "partner_id INTEGER REFERENCES partners(id) ON DELETE SET NULL");
+  await addColumn("enquiries", "referral_code TEXT");
+  for (const trigger of PARTNER_TRIGGERS) await db.execute(trigger);
+  await exec(PARTNER_INDEX_SQL);
+
   // Only a marker, never read back — and the hosted libSQL protocol rejects
   // write pragmas, so it is set on the local file backend only.
   if (!usingTurso) await run("PRAGMA user_version = 2");
@@ -549,12 +789,13 @@ export async function initDb(): Promise<void> {
   await topUpDefaults();
   if (!(await readSetting("site"))) await writeSetting("site", defaultContent.settings);
   if (!(await readSetting("advanced"))) await writeSetting("advanced", defaultContent.advanced);
+  await renameBrand();
 
   /* ---- Owner-account bootstrap ---- */
   const adminCount = (await get<{ c: number }>("SELECT count(*) AS c FROM admin_users"))?.c ?? 0;
   if (adminCount === 0) {
     // `||` (not `??`) so blank lines copied from .env.example fall back correctly.
-    const email = (process.env.ADMIN_EMAIL || "admin@novaframe.studio").toLowerCase().trim();
+    const email = (process.env.ADMIN_EMAIL || "admin@webxstudio.me").toLowerCase().trim();
     const fromEnv = process.env.ADMIN_PASSWORD ?? "";
     if (fromEnv && fromEnv.length < 10) {
       console.warn("[admin] ADMIN_PASSWORD is shorter than 10 characters - a strong password was generated instead.");
@@ -589,4 +830,5 @@ export async function initDb(): Promise<void> {
 
 async function purgeSessions(): Promise<void> {
   await run("DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now')");
+  await run("DELETE FROM partner_sessions WHERE datetime(expires_at) <= datetime('now')");
 }

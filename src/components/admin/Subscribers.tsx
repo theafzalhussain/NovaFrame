@@ -54,7 +54,7 @@ export default function Subscribers() {
             >
               <Icon name="copy" className="h-4 w-4" /> Copy emails
             </button>
-            <button type="button" className="btn btn-gold btn-sm" disabled={!visible.length} onClick={() => downloadFile("novaframe-subscribers.csv", toCsv(visible.map((s) => ({ email: s.email, source: s.source, joined: s.createdAt }))), "text/csv")}>
+            <button type="button" className="btn btn-gold btn-sm" disabled={!visible.length} onClick={() => downloadFile("webxstudio-subscribers.csv", toCsv(visible.map((s) => ({ email: s.email, source: s.source, joined: s.createdAt }))), "text/csv")}>
               <Icon name="download" className="h-4 w-4" /> Export CSV
             </button>
           </>

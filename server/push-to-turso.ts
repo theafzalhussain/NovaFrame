@@ -1,7 +1,7 @@
 /**
  * One-time data copy: local SQLite file  ->  hosted Turso database.
  *
- *   npm run turso:push                 (uses server/novaframe.db)
+ *   npm run turso:push                 (uses server/webxstudio.db)
  *   npm run turso:push -- --from=path/to/other.db
  *
  * Requires TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN) in .env or the shell.
@@ -31,7 +31,10 @@ if (!usingTurso) {
   process.exit(1);
 }
 
-const sourcePath = path.resolve(arg("from") ?? path.join(__dirname, "novaframe.db"));
+// A novaframe.db from before the WebXstudio rename is still accepted as the default source.
+const defaultSource =
+  ["webxstudio.db", "novaframe.db"].map((f) => path.join(__dirname, f)).find((p) => fs.existsSync(p)) ?? path.join(__dirname, "webxstudio.db");
+const sourcePath = path.resolve(arg("from") ?? defaultSource);
 if (!fs.existsSync(sourcePath)) {
   console.error(`\n  Source database not found: ${sourcePath}\n`);
   process.exit(1);
@@ -42,6 +45,7 @@ const TABLES = [
   "settings",
   "content",
   "admin_users",
+  "partners",
   "enquiries",
   "enquiry_notes",
   "bookings",
@@ -49,6 +53,10 @@ const TABLES = [
   "payments",
   "events",
   "audit_logs",
+  "ambassador_applications",
+  "client_payments",
+  "partner_commissions",
+  "partner_payouts",
 ] as const;
 
 const local = createClient({ url: `file:${sourcePath}` });

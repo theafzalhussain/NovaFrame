@@ -4,12 +4,12 @@
  */
 export default function Backdrop() {
   return (
-    <div className="nf-backdrop" aria-hidden="true">
-      <div className="nf-glow nf-glow-a" />
-      <div className="nf-glow nf-glow-b" />
-      <div className="nf-lines" />
-      <div className="nf-grain" />
-      <div className="nf-vignette" />
+    <div className="wx-backdrop" aria-hidden="true">
+      <div className="wx-glow wx-glow-a" />
+      <div className="wx-glow wx-glow-b" />
+      <div className="wx-lines" />
+      <div className="wx-grain" />
+      <div className="wx-vignette" />
     </div>
   );
 }

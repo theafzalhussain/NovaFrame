@@ -1,6 +1,6 @@
 <?php
 /**
- * Novaframe Studio — PHP configuration
+ * WebXstudio — PHP configuration
  * ------------------------------------
  * Values come from environment variables, then from a `.env` file in this
  * folder (KEY=value lines), then from the fallbacks below. On shared
@@ -38,10 +38,10 @@ function env(string $key, ?string $fallback = null): ?string
     $defaults = [
         'DB_HOST'        => '127.0.0.1',
         'DB_PORT'        => '3306',
-        'DB_NAME'        => 'novaframe',
+        'DB_NAME'        => 'webxstudio',
         'DB_USER'        => 'root',
         'DB_PASSWORD'    => '',
-        'ADMIN_EMAIL'    => 'admin@novaframe.studio',
+        'ADMIN_EMAIL'    => 'admin@webxstudio.me',
         'ADMIN_PASSWORD' => '',        // set this (10+ chars) to create the first owner account
         'ADMIN_NAME'     => 'Afzal Hussain',
         'CORS_ORIGIN'    => '',        // comma-separated allow-list; empty = reflect the caller
