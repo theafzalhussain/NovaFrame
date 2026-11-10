@@ -22,6 +22,17 @@ const MAX_EDGE = 1920;
 
 export type UploadedImage = { url: string; bytes: number; mimeType: string };
 
+export function resolveMediaUrl(value: string): string {
+  if (!value || !value.includes("/api/media/")) return value;
+  try {
+    const url = new URL(value, window.location.origin);
+    if (!url.pathname.startsWith("/api/media/")) return value;
+    return `${API_BASE}${url.pathname.slice("/api".length)}${url.search}${url.hash}`;
+  } catch {
+    return value;
+  }
+}
+
 export const formatBytes = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} kB`);
 
 function readAsDataUrl(blob: Blob) {

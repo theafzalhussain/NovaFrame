@@ -3,6 +3,7 @@ import { Icon } from "../components/Icons";
 import { Button, PageHero, Reveal } from "../components/ui";
 import type { Insight } from "../data/types";
 import { useContent } from "../lib/content";
+import { resolveMediaUrl } from "../lib/media";
 import { Link } from "../lib/router";
 import { prettyDate } from "../lib/site";
 import { cn } from "../utils/cn";
@@ -85,7 +86,7 @@ export function InsightsPage() {
                   <div className="relative flex items-center gap-3.5 border-t border-gold-300/10 pt-6">
                     {leadAuthor?.photo ? (
                       <img
-                        src={leadAuthor.photo}
+                        src={resolveMediaUrl(leadAuthor.photo)}
                         alt={lead.author}
                         className="h-12 w-12 rounded-full border border-gold-300/30 object-cover object-top"
                         loading="lazy"
@@ -145,7 +146,7 @@ export function InsightArticle({ article }: { article: Insight }) {
           <p className="mt-6 text-[18px] leading-relaxed text-sand">{article.excerpt}</p>
           <div className="mt-9 flex items-center gap-3.5 border-t border-gold-300/10 pt-6">
             {founder?.photo ? (
-              <img src={founder.photo} alt="" className="h-11 w-11 rounded-full border border-gold-300/30 object-cover object-top" />
+              <img src={resolveMediaUrl(founder.photo)} alt="" className="h-11 w-11 rounded-full border border-gold-300/30 object-cover object-top" />
             ) : null}
             <div>
               <p className="text-[14px] font-semibold text-ivory">{article.author}</p>

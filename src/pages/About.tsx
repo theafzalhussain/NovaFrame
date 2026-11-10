@@ -3,6 +3,7 @@ import { Icon } from "../components/Icons";
 import { Button, Diamond, IconTile, PageHero, Reveal, SectionHeading } from "../components/ui";
 import type { TeamMember } from "../data/types";
 import { useContent } from "../lib/content";
+import { resolveMediaUrl } from "../lib/media";
 
 type Fact = { label: string; value: string; icon: string; href?: string; external?: boolean };
 
@@ -62,7 +63,7 @@ function TeamProfile({ member, index }: { member: TeamMember; index: number }) {
           <figure className="group relative overflow-hidden rounded-[22px] border-[3px] border-gold-300/55 bg-ink-850 shadow-xl shadow-black/40 ring-4 ring-gold-300/10">
             {member.photo ? (
               <img
-                src={member.photo}
+                src={resolveMediaUrl(member.photo)}
                 alt={`${member.name}, ${member.role}`}
                 className="block aspect-[15/16] w-full object-cover object-top transition duration-700 group-hover:scale-[1.03]"
                 loading="lazy"
@@ -289,7 +290,7 @@ export default function About() {
                 <figure className="portrait-frame group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
                   {founder.photo ? (
                     <img
-                      src={founder.photo}
+                      src={resolveMediaUrl(founder.photo)}
                       alt={`${founder.name}, ${founder.role}`}
                       className="h-full w-full object-cover object-[50%_22%] transition duration-700 group-hover:scale-[1.03]"
                       loading="lazy"

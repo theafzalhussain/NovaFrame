@@ -2,7 +2,7 @@ import { useId, useRef, useState, type DragEvent } from "react";
 import type { InsightBlock } from "../../data/types";
 import { Icon } from "../Icons";
 import { cn } from "../../utils/cn";
-import { IMAGE_ACCEPT, formatBytes, uploadImage } from "../../lib/media";
+import { IMAGE_ACCEPT, formatBytes, resolveMediaUrl, uploadImage } from "../../lib/media";
 import { FieldShell, IconPicker, LinesInput, Spinner, TagsInput, Toggle, useToast } from "./AdminUI";
 import { getPath, setPath, type FieldDef } from "./schemas";
 
@@ -176,7 +176,7 @@ function ImageField({ field, id, value, onChange }: { field: FieldDef; id: strin
                 <Icon name="alert" className="h-4 w-4 text-ember" /> This image couldn't be loaded — upload a new one.
               </p>
             ) : (
-              <img src={value} alt="" className="max-h-56 w-full object-cover object-top" onError={() => setBroken(true)} onLoad={() => setBroken(false)} />
+              <img src={resolveMediaUrl(value)} alt="" className="max-h-56 w-full object-cover object-top" onError={() => setBroken(true)} onLoad={() => setBroken(false)} />
             )}
             {busy ? (
               <div className="absolute inset-0 grid place-items-center bg-ink-950/70">

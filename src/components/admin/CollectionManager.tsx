@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { blankFor } from "../../data/blanks";
 import type { CollectionName, Project } from "../../data/types";
 import { admin, notifyContentChanged, type ContentEntry } from "../../lib/api";
+import { resolveMediaUrl } from "../../lib/media";
 import { timeAgo } from "../../lib/site";
 import { Icon } from "../Icons";
 import ProjectCard from "../ProjectCard";
@@ -218,7 +219,7 @@ export default function CollectionManager({ name, canReset }: { name: Collection
                   <button type="button" onClick={() => openEdit(entry)} className="flex min-w-0 flex-1 items-center gap-4 text-left">
                     {schema.imageField ? (
                       <span className="grid h-12 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-gold-300/10 bg-ink-950">
-                        {image ? <img src={image} alt="" className="h-full w-full object-cover object-top" /> : <Icon name={schema.icon} className="h-4 w-4 text-smoke" />}
+                        {image ? <img src={resolveMediaUrl(image)} alt="" className="h-full w-full object-cover object-top" /> : <Icon name={schema.icon} className="h-4 w-4 text-smoke" />}
                       </span>
                     ) : (
                       <span className="icon-tile h-10 w-10 shrink-0 rounded-xl">

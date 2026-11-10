@@ -13,6 +13,7 @@ import { StatusDot, useStudioStatus } from "../components/StudioStatus";
 import { Button, Eyebrow, IconTile, Marquee, Reveal, SectionHeading, SpotlightCard, Stat } from "../components/ui";
 import type { Project } from "../data/types";
 import { useContent } from "../lib/content";
+import { resolveMediaUrl } from "../lib/media";
 import { usePauseOffscreen } from "../lib/onscreen";
 import { Link, scrollToId } from "../lib/router";
 import { availabilityLabel, hostOf, whatsappLink } from "../lib/site";
@@ -152,7 +153,7 @@ function Hero() {
             )}
           >
             <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gold-300/15 bg-ink-850">
-              {p.cover ? <img src={p.cover} alt="" className="h-full w-full object-cover object-top" /> : null}
+              {p.cover ? <img src={resolveMediaUrl(p.cover)} alt="" className="h-full w-full object-cover object-top" /> : null}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ivory">
@@ -588,7 +589,7 @@ function FounderSection() {
             <figure className="portrait-frame group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
               {founder.photo ? (
                 <img
-                  src={founder.photo}
+                  src={resolveMediaUrl(founder.photo)}
                   alt={`${founder.name}, ${founder.role}`}
                   className="h-full w-full object-cover object-[50%_22%] transition duration-700 group-hover:scale-[1.03]"
                   loading="lazy"

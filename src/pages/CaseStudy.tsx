@@ -6,6 +6,7 @@ import { TechLogo } from "../components/TechLogo";
 import { Button, Reveal } from "../components/ui";
 import type { Project } from "../data/types";
 import { useContent } from "../lib/content";
+import { resolveMediaUrl } from "../lib/media";
 import { Link } from "../lib/router";
 import { hostOf } from "../lib/site";
 
@@ -34,7 +35,7 @@ function ScreenshotViewer({ project }: { project: Project }) {
       </div>
       <div className={tall ? "max-h-[78vh] overflow-y-auto" : ""} tabIndex={tall ? 0 : undefined} aria-label={`${project.title} full-page screenshot`}>
         <img
-          src={project.cover}
+          src={resolveMediaUrl(project.cover)}
           alt={`${project.title} full-page screenshot`}
           className="block w-full"
           onLoad={(e) => setTall(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth > 0.9)}

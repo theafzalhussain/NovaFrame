@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Project } from "../data/types";
 import { hostOf } from "../lib/site";
+import { resolveMediaUrl } from "../lib/media";
 import { cn } from "../utils/cn";
 
 function BrowserBar({ url, compact }: { url: string; compact?: boolean }) {
@@ -101,7 +102,7 @@ export default function ProjectVisual({ project, compact = false, className }: {
       <BrowserBar url={hostOf(project.liveUrl) || `${project.id}.app`} compact={compact} />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <img
-          src={project.cover}
+          src={resolveMediaUrl(project.cover)}
           alt={`${project.title} — ${project.subtitle || project.category} screenshot`}
           loading="lazy"
           decoding="async"
