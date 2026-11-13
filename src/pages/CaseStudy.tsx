@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Icon } from "../components/Icons";
+import Picture from "../components/Picture";
 import ProjectVisual from "../components/ProjectVisual";
 import { ProjectLinks, StatusPill } from "../components/ProjectCard";
 import { TechLogo } from "../components/TechLogo";
 import { Button, Reveal } from "../components/ui";
 import type { Project } from "../data/types";
 import { useContent } from "../lib/content";
-import { resolveMediaUrl } from "../lib/media";
 import { Link } from "../lib/router";
 import { hostOf } from "../lib/site";
 
@@ -34,10 +34,13 @@ function ScreenshotViewer({ project }: { project: Project }) {
         {tall ? <span className="label hidden text-[9.5px] sm:block">Scroll inside ↓</span> : <span className="w-16" />}
       </div>
       <div className={tall ? "max-h-[78vh] overflow-y-auto" : ""} tabIndex={tall ? 0 : undefined} aria-label={`${project.title} full-page screenshot`}>
-        <img
-          src={resolveMediaUrl(project.cover)}
+        <Picture
+          src={project.cover}
           alt={`${project.title} full-page screenshot`}
           className="block w-full"
+          // The case-study screenshot is the largest thing on the page — load it first.
+          priority
+          sizes="(min-width: 1024px) 900px, 100vw"
           onLoad={(e) => setTall(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth > 0.9)}
         />
       </div>

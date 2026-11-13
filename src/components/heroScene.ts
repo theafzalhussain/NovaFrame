@@ -1,6 +1,3 @@
-import * as THREE from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-
 /**
  * "The Armillary" — a real-time WebGL centrepiece.
  * Polished obsidian core with engraved meridians, precessing gold rings
@@ -15,7 +12,44 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
  *
  * Set-up is split into short tasks (and shaders compile asynchronously where the browser
  * supports it), so a tap that lands while the scene is starting is handled straight away.
+ *
+ * Imports are named rather than `import * as THREE`, which lets Rollup drop the parts of the
+ * library this scene never touches. The environment-map pipeline is loaded only on the "full"
+ * path, so phones never download it.
  */
+import {
+  ACESFilmicToneMapping,
+  AdditiveBlending,
+  BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
+  CanvasTexture,
+  DirectionalLight,
+  Group,
+  InstancedMesh,
+  Line,
+  LineBasicMaterial,
+  Matrix4,
+  Mesh,
+  MeshMatcapMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  PMREMGenerator,
+  PerspectiveCamera,
+  PointLight,
+  Points,
+  PointsMaterial,
+  Quaternion,
+  SRGBColorSpace,
+  Scene,
+  SphereGeometry,
+  Sprite,
+  SpriteMaterial,
+  TorusGeometry,
+  Vector3,
+  WebGLRenderer,
+} from "three";
+
 export type HeroQuality = "full" | "lite";
 
 type Options = {
@@ -39,7 +73,7 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
   };
   const teardown: (() => void)[] = [];
   let disposed = false;
-  let renderer: THREE.WebGLRenderer | null = null;
+  let renderer: WebGLRenderer | null = null;
 
   const destroy = () => {
     if (disposed) return;
@@ -55,7 +89,7 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
   const init = async () => {
     /* ---------- Renderer ---------- */
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: !lite, alpha: true, powerPreference: lite ? "low-power" : "default" });
+      renderer = new WebGLRenderer({ antialias: !lite, alpha: true, powerPreference: lite ? "low-power" : "default" });
     } catch {
       onFail();
       return;
@@ -66,10 +100,12 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     gl.debug.checkShaderErrors = false;
     let width = mount.clientWidth || 800;
     let height = mount.clientHeight || 700;
-    gl.setPixelRatio(Math.min(window.devicePixelRatio, lite ? 1.25 : 1.5));
+    /** Current pixel-ratio ceiling. Lowered by `degrade()` if the device can't keep up. */
+    let pixelCap = lite ? 1.25 : 1.5;
+    gl.setPixelRatio(Math.min(window.devicePixelRatio, pixelCap));
     gl.setSize(width, height, false);
-    gl.outputColorSpace = THREE.SRGBColorSpace;
-    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.outputColorSpace = SRGBColorSpace;
+    gl.toneMapping = ACESFilmicToneMapping;
     gl.toneMappingExposure = 1.08;
     Object.assign(gl.domElement.style, { width: "100%", height: "100%", display: "block" });
 
@@ -81,9 +117,15 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     // Lite: matcap shading (a painted "lit sphere" texture). It reads as polished gold on a phone
     // screen but needs no environment pre-render and compiles in milliseconds — the PBR path
     // blocked a phone's main thread for over a second while it set up.
-    const scene = new THREE.Scene();
+    //
+    // RoomEnvironment is imported here, inside the branch, so it lands in its own file that lite
+    // devices never request. (PMREMGenerator is imported from the "three" barrel above: pulling
+    // it from `three/src/...` instead would bundle a second copy of half the library.)
+    const scene = new Scene();
     if (!lite) {
-      const pmrem = track(new THREE.PMREMGenerator(gl));
+      const { RoomEnvironment } = await import("three/examples/jsm/environments/RoomEnvironment.js");
+      if (disposed) return;
+      const pmrem = track(new PMREMGenerator(gl));
       const room = new RoomEnvironment();
       scene.environment = track(pmrem.fromScene(room, 0.04).texture);
       (room as unknown as { dispose?: () => void }).dispose?.();
@@ -91,7 +133,7 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       if (disposed) return;
     }
 
-    const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 100);
+    const camera = new PerspectiveCamera(34, width / height, 0.1, 100);
     camera.position.set(0, 0, 10);
 
     /* ---------- Materials ---------- */
@@ -111,13 +153,13 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
         ctx.fillStyle = edge;
         ctx.fillRect(0, 0, 256, 256);
       }
-      const tex = track(new THREE.CanvasTexture(c));
-      tex.colorSpace = THREE.SRGBColorSpace;
+      const tex = track(new CanvasTexture(c));
+      tex.colorSpace = SRGBColorSpace;
       return tex;
     };
     const gold = track(
       lite
-        ? new THREE.MeshMatcapMaterial({
+        ? new MeshMatcapMaterial({
             matcap: matcap(
               [
                 [0, "#fff4d8"],
@@ -131,11 +173,11 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
             ),
             toneMapped: false,
           })
-        : new THREE.MeshStandardMaterial({ color: 0xd8b26c, metalness: 1, roughness: 0.26, envMapIntensity: 1.25 }),
+        : new MeshStandardMaterial({ color: 0xd8b26c, metalness: 1, roughness: 0.26, envMapIntensity: 1.25 }),
     );
     const goldSoft = track(
       lite
-        ? new THREE.MeshMatcapMaterial({
+        ? new MeshMatcapMaterial({
             matcap: matcap(
               [
                 [0, "#f5e3b8"],
@@ -148,11 +190,11 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
             ),
             toneMapped: false,
           })
-        : new THREE.MeshStandardMaterial({ color: 0xb98d4a, metalness: 1, roughness: 0.42, envMapIntensity: 1 }),
+        : new MeshStandardMaterial({ color: 0xb98d4a, metalness: 1, roughness: 0.42, envMapIntensity: 1 }),
     );
     const obsidian = track(
       lite
-        ? new THREE.MeshMatcapMaterial({
+        ? new MeshMatcapMaterial({
             matcap: matcap(
               [
                 [0, "#a49886"],
@@ -165,7 +207,7 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
             ),
             toneMapped: false,
           })
-        : new THREE.MeshPhysicalMaterial({
+        : new MeshPhysicalMaterial({
             color: 0x0c0b0a,
             metalness: 0.25,
             roughness: 0.14,
@@ -174,34 +216,36 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
             envMapIntensity: 1.1,
           }),
     );
-    const engraving = track(new THREE.LineBasicMaterial({ color: 0xe3c88c, transparent: true, opacity: 0.22 }));
+    const engraving = track(new LineBasicMaterial({ color: 0xe3c88c, transparent: true, opacity: 0.22 }));
 
     /* ---------- Scene graph ---------- */
-    const root = new THREE.Group();
+    // Tessellation is set to the point where more segments stop being visible at this size on a
+    // 1.5x-capped canvas. The ring torus dominated the vertex count, so it is cut the hardest.
+    const root = new Group();
     root.rotation.z = 0.32;
     scene.add(root);
 
     // Obsidian core + engraved meridians
-    const coreSegments = lite ? 48 : 96;
-    root.add(new THREE.Mesh(track(new THREE.SphereGeometry(1.08, coreSegments, coreSegments)), obsidian));
+    const coreSegments = lite ? 40 : 64;
+    root.add(new Mesh(track(new SphereGeometry(1.08, coreSegments, coreSegments)), obsidian));
 
-    const engraved = new THREE.Group();
-    const circlePoints = (radius: number, segments = lite ? 96 : 160) => {
-      const pts: THREE.Vector3[] = [];
+    const engraved = new Group();
+    const circlePoints = (radius: number, segments = lite ? 80 : 128) => {
+      const pts: Vector3[] = [];
       for (let i = 0; i <= segments; i++) {
         const a = (i / segments) * Math.PI * 2;
-        pts.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+        pts.push(new Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
       }
       return pts;
     };
     for (const lat of [-60, -30, 0, 30, 60]) {
       const phi = (lat * Math.PI) / 180;
-      const line = new THREE.Line(track(new THREE.BufferGeometry().setFromPoints(circlePoints(1.095 * Math.cos(phi)))), engraving);
+      const line = new Line(track(new BufferGeometry().setFromPoints(circlePoints(1.095 * Math.cos(phi)))), engraving);
       line.position.y = 1.095 * Math.sin(phi);
       engraved.add(line);
     }
     for (let i = 0; i < 6; i++) {
-      const line = new THREE.Line(track(new THREE.BufferGeometry().setFromPoints(circlePoints(1.095))), engraving);
+      const line = new Line(track(new BufferGeometry().setFromPoints(circlePoints(1.095))), engraving);
       line.rotation.z = Math.PI / 2;
       line.rotation.y = (i / 6) * Math.PI;
       engraved.add(line);
@@ -221,29 +265,29 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       hctx.fillRect(0, 0, 256, 256);
     }
     const haloMat = track(
-      new THREE.SpriteMaterial({ map: track(new THREE.CanvasTexture(haloCanvas)), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }),
+      new SpriteMaterial({ map: track(new CanvasTexture(haloCanvas)), blending: AdditiveBlending, depthWrite: false, transparent: true }),
     );
-    const halo = new THREE.Sprite(haloMat);
+    const halo = new Sprite(haloMat);
     halo.scale.setScalar(5.6);
     halo.position.z = -1.2;
     root.add(halo);
 
     // Precessing rings with orbiting beads
-    const beadSegments = lite ? 12 : 24;
-    const beadGeo = track(new THREE.SphereGeometry(0.075, beadSegments, beadSegments));
+    const beadSegments = lite ? 10 : 16;
+    const beadGeo = track(new SphereGeometry(0.075, beadSegments, beadSegments));
     const ringSpecs = [
       { r: 2.05, tube: 0.024, tilt: [Math.PI / 2, 0, 0], spin: 0.22, precess: 0.05, beads: 1 },
       { r: 2.32, tube: 0.018, tilt: [0.45, 0.7, 0], spin: -0.16, precess: -0.07, beads: 2 },
       { r: 2.56, tube: 0.014, tilt: [1.2, -0.5, 0.3], spin: 0.12, precess: 0.04, beads: 1 },
     ];
     const rings = ringSpecs.map((spec, i) => {
-      const pivot = new THREE.Group();
+      const pivot = new Group();
       pivot.rotation.set(spec.tilt[0], spec.tilt[1], spec.tilt[2]);
-      const spinner = new THREE.Group();
-      const ringGeo = track(new THREE.TorusGeometry(spec.r, spec.tube, lite ? 10 : 24, lite ? 160 : 260));
-      spinner.add(new THREE.Mesh(ringGeo, i === 1 ? goldSoft : gold));
+      const spinner = new Group();
+      const ringGeo = track(new TorusGeometry(spec.r, spec.tube, lite ? 8 : 12, lite ? 120 : 180));
+      spinner.add(new Mesh(ringGeo, i === 1 ? goldSoft : gold));
       for (let b = 0; b < spec.beads; b++) {
-        const bead = new THREE.Mesh(beadGeo, gold);
+        const bead = new Mesh(beadGeo, gold);
         const a = (b / spec.beads) * Math.PI * 2 + i;
         bead.position.set(Math.cos(a) * spec.r, Math.sin(a) * spec.r, 0);
         spinner.add(bead);
@@ -255,12 +299,12 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
 
     // Watch-bezel tick ring
     const TICKS = 96;
-    const ticks = track(new THREE.InstancedMesh(track(new THREE.BoxGeometry(0.014, 0.014, 0.16)), goldSoft, TICKS));
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const s = new THREE.Vector3();
-    const p = new THREE.Vector3();
-    const up = new THREE.Vector3(0, 1, 0);
+    const ticks = track(new InstancedMesh(track(new BoxGeometry(0.014, 0.014, 0.16)), goldSoft, TICKS));
+    const m = new Matrix4();
+    const q = new Quaternion();
+    const s = new Vector3();
+    const p = new Vector3();
+    const up = new Vector3(0, 1, 0);
     for (let i = 0; i < TICKS; i++) {
       const a = (i / TICKS) * Math.PI * 2;
       const major = i % 8 === 0;
@@ -270,13 +314,13 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       m.compose(p, q, s);
       ticks.setMatrixAt(i, m);
     }
-    const bezel = new THREE.Group();
+    const bezel = new Group();
     bezel.add(ticks);
     bezel.rotation.x = 0.28;
     root.add(bezel);
 
     // Gold dust
-    const DUST = lite ? 160 : window.innerWidth < 768 ? 220 : 520;
+    const DUST = lite ? 160 : window.innerWidth < 768 ? 220 : 420;
     const dustPositions = new Float32Array(DUST * 3);
     for (let i = 0; i < DUST; i++) {
       const r = 3.2 + Math.random() * 4.2;
@@ -286,20 +330,20 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       dustPositions[i * 3 + 1] = r * Math.cos(phi) * 0.7;
       dustPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta) - 1;
     }
-    const dustGeo = track(new THREE.BufferGeometry());
-    dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
+    const dustGeo = track(new BufferGeometry());
+    dustGeo.setAttribute("position", new BufferAttribute(dustPositions, 3));
     const dustMat = track(
-      new THREE.PointsMaterial({ color: 0xe3c88c, size: 0.03, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending }),
+      new PointsMaterial({ color: 0xe3c88c, size: 0.03, transparent: true, opacity: 0.7, depthWrite: false, blending: AdditiveBlending }),
     );
-    const dust = new THREE.Points(dustGeo, dustMat);
+    const dust = new Points(dustGeo, dustMat);
     scene.add(dust);
 
     /* ---------- Lights (env map does most of the work; matcaps need none) ---------- */
     if (!lite) {
-      const key = new THREE.DirectionalLight(0xfff0d2, 2.2);
+      const key = new DirectionalLight(0xfff0d2, 2.2);
       key.position.set(4, 5, 6);
       scene.add(key);
-      const rim = new THREE.PointLight(0xd4ad66, 30, 30, 2);
+      const rim = new PointLight(0xd4ad66, 30, 30, 2);
       rim.position.set(-5, -2, -3);
       scene.add(rim);
     }
@@ -328,6 +372,7 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
 
     /* ---------- Layout ---------- */
     const applySize = () => {
+      gl.setPixelRatio(Math.min(window.devicePixelRatio, pixelCap));
       gl.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
@@ -347,28 +392,58 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     /* ---------- Loop ---------- */
     // Lite runs at 30 fps, paced by a timer so the browser isn't woken for a frame it then skips,
     // and holds still while the page is being scrolled (the GPU goes to smooth scrolling instead).
-    const frameInterval = lite ? 1000 / 30 : 0;
+    let frameInterval = lite ? 1000 / 30 : 0;
     let raf = 0;
     let timer = 0;
     let running = false;
     let visible = true;
     let prevNow = 0;
     let quietUntil = 0;
+    let reducedMotion = reduced;
+
+    /* ---------- Adaptive quality ---------- */
+    // The quality tier is chosen up front from device memory and core count, which is a guess.
+    // This measures what the device actually delivers and steps down if it can't keep up, so a
+    // struggling machine ends up smooth instead of stuttering for the whole visit.
+    const frameBudget = lite ? 1000 / 30 : 1000 / 60;
+    let tier = 0;
+    let slow = 0;
+    let sampled = 0;
+
+    const degrade = () => {
+      if (tier >= 2) return;
+      tier += 1;
+      if (tier === 1) pixelCap = lite ? 1 : 1.1; // fewer pixels is the cheapest win
+      else frameInterval = Math.max(frameInterval, 1000 / 30); // then halve the frame rate
+      applySize();
+      slow = 0;
+      sampled = 0;
+    };
 
     const loop = (now: number) => {
       raf = 0;
       if (!running) return;
       if (now >= quietUntil) {
+        const delta = prevNow ? now - prevNow : 0;
         // Resume where it paused instead of jumping (caps long gaps, e.g. a backgrounded tab).
-        elapsed += prevNow ? Math.min(now - prevNow, 100) / 1000 : 1 / 60;
+        elapsed += prevNow ? Math.min(delta, 100) / 1000 : 1 / 60;
         frame();
+        // Ignore the first second: shader compilation and first-paint work are not steady state.
+        if (tier < 2 && delta > 0 && delta < 500) {
+          sampled += 1;
+          if (sampled > 60) {
+            if (delta > frameBudget * 1.6) slow += 1;
+            else if (slow > 0) slow -= 1;
+            if (slow >= 30) degrade();
+          }
+        }
       }
       prevNow = now;
       if (frameInterval) timer = window.setTimeout(() => (raf = requestAnimationFrame(loop)), frameInterval - 6);
       else raf = requestAnimationFrame(loop);
     };
     const start = () => {
-      if (running || reduced || !visible || document.hidden || disposed) return;
+      if (running || reducedMotion || !visible || document.hidden || disposed) return;
       running = true;
       prevNow = 0;
       raf = requestAnimationFrame(loop);
@@ -408,6 +483,18 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     };
     const onVisibility = () => (document.hidden ? stop() : start());
 
+    // Reduced motion can be switched on mid-visit; honour it without needing a reload.
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onMotionChange = () => {
+      reducedMotion = motion.matches;
+      if (reducedMotion) {
+        stop();
+        frame(); // leave a still frame on screen rather than a blank canvas
+      } else {
+        start();
+      }
+    };
+
     mount.appendChild(gl.domElement);
     frame(); // first paint (and the only one with reduced motion)
     onReady();
@@ -417,12 +504,14 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     window.addEventListener("pointermove", onPointer, { passive: true });
     window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("visibilitychange", onVisibility);
+    motion.addEventListener("change", onMotionChange);
     teardown.push(() => {
       ro.disconnect();
       io.disconnect();
       window.removeEventListener("pointermove", onPointer);
       window.removeEventListener("scroll", onScroll);
       document.removeEventListener("visibilitychange", onVisibility);
+      motion.removeEventListener("change", onMotionChange);
     });
     start();
   };

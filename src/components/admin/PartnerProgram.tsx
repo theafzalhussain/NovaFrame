@@ -825,7 +825,7 @@ export function PartnersPanel({ focusId }: { focusId?: number | null }) {
         ) : error ? (
           <LoadError message={error} onRetry={() => void load()} />
         ) : rows.length === 0 ? (
-          <EmptyState icon="users" title={filtersOn ? "No partners match" : "No partners yet"} body={filtersOn ? "Try other filters." : "Partners appear here as soon as students register at /#/partner."} />
+          <EmptyState icon="users" title={filtersOn ? "No partners match" : "No partners yet"} body={filtersOn ? "Try other filters." : "Partners appear here as soon as students register at /partner."} />
         ) : (
           <table className="w-full min-w-[1000px] text-left">
             <thead>

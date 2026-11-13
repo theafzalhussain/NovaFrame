@@ -9,6 +9,7 @@ import { ContentProvider, useContent } from "./lib/content";
 import { captureReferral, track } from "./lib/api";
 import { prefersLowData, whenIdle } from "./lib/idle";
 import { lazyPage } from "./lib/lazyPage";
+import { useSeo } from "./lib/useSeo";
 import type { SiteContent } from "./data/types";
 
 // The home page ships in the main bundle (most visits start there); every other page is its own
@@ -69,65 +70,62 @@ class RouteBoundary extends Component<{ children: ReactNode }, { failed: boolean
   }
 }
 
-function resolve(path: string, content: SiteContent): { node: ReactNode; title: string } {
-  const brand = content.settings.name;
-  const t = (title: string) => `${title} | ${brand}`;
+function resolve(path: string, content: SiteContent): ReactNode {
   const [first, second, ...rest] = path.split("/").filter(Boolean);
 
-  if (!first) return { node: <Home />, title: `${brand} — Premium Websites, Web Apps & PWAs | ${content.settings.city}` };
-  if (rest.length) return { node: <NotFoundPage path={path} />, title: t("Page not found") };
+  if (!first) return <Home />;
+  if (rest.length) return <NotFoundPage path={path} />;
 
   if (!second) {
-    const pages: Record<string, { node: ReactNode; title: string }> = {
-      services: { node: <Services />, title: t("Services — Web, Apps, Backend, UI/UX, SEO & Video") },
-      capabilities: { node: <Services />, title: t("Services") },
-      work: { node: <Portfolio />, title: t("Work — Live Products & Case Studies") },
-      portfolio: { node: <Portfolio />, title: t("Work — Live Products & Case Studies") },
-      studio: { node: <About />, title: t("The Studio — Founder, Story & Standards") },
-      about: { node: <About />, title: t("The Studio — Founder, Story & Standards") },
-      "tech-stack": { node: <TechStack />, title: t("Tech Stack — Where Every Tool Has Shipped") },
-      pricing: { node: <Pricing />, title: t("Pricing — Transparent Packages & Estimator") },
-      insights: { node: <InsightsPage />, title: t("Insights — Engineering Notes") },
-      contact: { node: <Contact />, title: t("Contact — Start a Project") },
-      book: { node: <BookCallPage />, title: t("Book a Free 30-Minute Strategy Call") },
-      pay: { node: <PayPage />, title: t("Pay Securely Online") },
-      earn: { node: <EarnPage />, title: t("Earn With Us — Student Partner & Campus Ambassador Program") },
-      partner: { node: <PartnerPortal />, title: t("Partner Dashboard") },
-      confirmation: { node: <ConfirmationPage />, title: t("Confirmation") },
-      privacy: { node: <LegalPage doc="privacy" />, title: t("Privacy Policy") },
-      terms: { node: <LegalPage doc="terms" />, title: t("Terms of Service") },
-      sitemap: { node: <Sitemap />, title: t("Sitemap") },
-      admin: { node: <AdminPortal />, title: t("Admin Console") },
-      portal: { node: <AdminPortal />, title: t("Admin Console") },
+    const pages: Record<string, ReactNode> = {
+      services: <Services />,
+      capabilities: <Services />,
+      work: <Portfolio />,
+      portfolio: <Portfolio />,
+      studio: <About />,
+      about: <About />,
+      "tech-stack": <TechStack />,
+      pricing: <Pricing />,
+      insights: <InsightsPage />,
+      contact: <Contact />,
+      book: <BookCallPage />,
+      pay: <PayPage />,
+      earn: <EarnPage />,
+      partner: <PartnerPortal />,
+      confirmation: <ConfirmationPage />,
+      privacy: <LegalPage doc="privacy" />,
+      terms: <LegalPage doc="terms" />,
+      sitemap: <Sitemap />,
+      admin: <AdminPortal />,
+      portal: <AdminPortal />,
     };
-    return pages[first] ?? { node: <NotFoundPage path={path} />, title: t("Page not found") };
+    return pages[first] ?? <NotFoundPage path={path} />;
   }
 
   if (first === "work" || first === "portfolio") {
     const project = content.collections.projects.find((p) => p.id === second);
-    if (project) return { node: <CaseStudyPage project={project} />, title: t(`${project.title} — ${project.subtitle}`) };
+    if (project) return <CaseStudyPage project={project} />;
   }
   if (first === "services" || first === "capabilities") {
     const service = content.collections.services.find((s) => s.id === second);
-    if (service) return { node: <CapabilityDetail service={service} />, title: t(`${service.title} Services`) };
+    if (service) return <CapabilityDetail service={service} />;
   }
   if (first === "insights") {
     const article = content.collections.insights.find((a) => a.id === second);
-    if (article) return { node: <InsightArticle article={article} />, title: t(article.title) };
+    if (article) return <InsightArticle article={article} />;
   }
-  return { node: <NotFoundPage path={path} />, title: t("Page not found") };
+  return <NotFoundPage path={path} />;
 }
 
 function Routes() {
   const { path, query } = useRouter();
   const content = useContent();
   const isAdmin = path === "/admin" || path === "/portal";
-  const { node, title } = resolve(path, content);
+  const node = resolve(path, content);
   const ref = query.get("ref");
 
-  useEffect(() => {
-    document.title = title;
-  }, [title]);
+  // Title, description, canonical, Open Graph and JSON-LD for this route.
+  useSeo(path, content);
 
   // Student Partner referral links: `#/?ref=CODE` (or `?ref=CODE` before the hash).
   useEffect(() => {

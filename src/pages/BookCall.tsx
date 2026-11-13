@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BrandMark } from "../components/Brand";
 import { Icon } from "../components/Icons";
+import Picture from "../components/Picture";
 import { StudioStatusPill } from "../components/StudioStatus";
 import { Eyebrow, Reveal } from "../components/ui";
 import { api, track } from "../lib/api";
 import { confirmationPath, saveConfirmation } from "../lib/confirmation";
 import { useContent } from "../lib/content";
-import { resolveMediaUrl } from "../lib/media";
 import { useRouter } from "../lib/router";
 import { upcomingWorkdays } from "../lib/site";
 import { zonedToUtc } from "../lib/time";
@@ -146,7 +146,7 @@ export default function BookCallPage() {
           {founder ? (
             <Reveal delay={160}>
               <div className="lux-card mt-10 flex items-center gap-4 p-5">
-                {founder.photo ? <img src={resolveMediaUrl(founder.photo)} alt="" className="h-14 w-14 rounded-full border border-gold-300/30 object-cover object-top" /> : <BrandMark size={56} />}
+                {founder.photo ? <Picture src={founder.photo} alt="" sizes="56px" className="h-14 w-14 rounded-full border border-gold-300/30 object-cover object-top" /> : <BrandMark size={56} />}
                 <div className="min-w-0">
                   <p className="text-[15px] font-semibold text-ivory">You'll speak with {founder.name}</p>
                   <p className="text-[12.5px] text-mist">{founder.role}</p>

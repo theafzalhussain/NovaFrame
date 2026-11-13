@@ -1,9 +1,9 @@
 import { Seal } from "../components/Brand";
 import { Icon } from "../components/Icons";
+import Picture from "../components/Picture";
 import { Button, Diamond, IconTile, PageHero, Reveal, SectionHeading } from "../components/ui";
 import type { TeamMember } from "../data/types";
 import { useContent } from "../lib/content";
-import { resolveMediaUrl } from "../lib/media";
 
 type Fact = { label: string; value: string; icon: string; href?: string; external?: boolean };
 
@@ -62,12 +62,11 @@ function TeamProfile({ member, index }: { member: TeamMember; index: number }) {
         <div className="p-5 sm:p-6 lg:p-7">
           <figure className="group relative overflow-hidden rounded-[22px] border-[3px] border-gold-300/55 bg-ink-850 shadow-xl shadow-black/40 ring-4 ring-gold-300/10">
             {member.photo ? (
-              <img
-                src={resolveMediaUrl(member.photo)}
+              <Picture
+                src={member.photo}
                 alt={`${member.name}, ${member.role}`}
+                sizes="(min-width: 1024px) 320px, (min-width: 640px) 45vw, 90vw"
                 className="block aspect-[15/16] w-full object-cover object-top transition duration-700 group-hover:scale-[1.03]"
-                loading="lazy"
-                decoding="async"
               />
             ) : (
               <div className="display text-gold grid aspect-[15/16] w-full place-items-center text-[6rem]">{member.initials}</div>
@@ -289,11 +288,11 @@ export default function About() {
                 <div aria-hidden className="portrait-glow pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
                 <figure className="portrait-frame group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
                   {founder.photo ? (
-                    <img
-                      src={resolveMediaUrl(founder.photo)}
+                    <Picture
+                      src={founder.photo}
                       alt={`${founder.name}, ${founder.role}`}
+                      sizes="(min-width: 1024px) 460px, 90vw"
                       className="h-full w-full object-cover object-[50%_22%] transition duration-700 group-hover:scale-[1.03]"
-                      loading="lazy"
                     />
                   ) : (
                     <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>

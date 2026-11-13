@@ -6,6 +6,7 @@ import Faq from "../components/Faq";
 import FoundingProgram from "../components/FoundingProgram";
 import ProjectCard, { ProjectLinks, StatusPill } from "../components/ProjectCard";
 import ProjectVisual from "../components/ProjectVisual";
+import Picture from "../components/Picture";
 import Testimonials from "../components/Testimonials";
 import { Seal } from "../components/Brand";
 import { Icon } from "../components/Icons";
@@ -13,7 +14,6 @@ import { StatusDot, useStudioStatus } from "../components/StudioStatus";
 import { Button, Eyebrow, IconTile, Marquee, Reveal, SectionHeading, SpotlightCard, Stat } from "../components/ui";
 import type { Project } from "../data/types";
 import { useContent } from "../lib/content";
-import { resolveMediaUrl } from "../lib/media";
 import { usePauseOffscreen } from "../lib/onscreen";
 import { Link, scrollToId } from "../lib/router";
 import { availabilityLabel, hostOf, whatsappLink } from "../lib/site";
@@ -153,7 +153,7 @@ function Hero() {
             )}
           >
             <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gold-300/15 bg-ink-850">
-              {p.cover ? <img src={resolveMediaUrl(p.cover)} alt="" className="h-full w-full object-cover object-top" /> : null}
+              {p.cover ? <Picture src={p.cover} alt="" sizes="44px" className="h-full w-full object-cover object-top" /> : null}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ivory">
@@ -588,11 +588,11 @@ function FounderSection() {
             <div aria-hidden className="portrait-glow pointer-events-none absolute -inset-5 -z-10 rounded-[40px] bg-gold-400/10 blur-3xl" />
             <figure className="portrait-frame group relative aspect-[4/5] overflow-hidden rounded-[28px] bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-gold-300/15">
               {founder.photo ? (
-                <img
-                  src={resolveMediaUrl(founder.photo)}
+                <Picture
+                  src={founder.photo}
                   alt={`${founder.name}, ${founder.role}`}
+                  sizes="(min-width: 1024px) 460px, 90vw"
                   className="h-full w-full object-cover object-[50%_22%] transition duration-700 group-hover:scale-[1.03]"
-                  loading="lazy"
                 />
               ) : (
                 <div className="display text-gold grid h-full place-items-center text-[6rem]">{founder.initials}</div>

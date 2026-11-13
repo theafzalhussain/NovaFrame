@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Project } from "../data/types";
 import { hostOf } from "../lib/site";
-import { resolveMediaUrl } from "../lib/media";
+import Picture from "./Picture";
 import { cn } from "../utils/cn";
 
 function BrowserBar({ url, compact }: { url: string; compact?: boolean }) {
@@ -101,11 +101,11 @@ export default function ProjectVisual({ project, compact = false, className }: {
     <div className={cn("flex h-full w-full flex-col bg-ink-900", className)}>
       <BrowserBar url={hostOf(project.liveUrl) || `${project.id}.app`} compact={compact} />
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <img
-          src={resolveMediaUrl(project.cover)}
+        <Picture
+          src={project.cover}
           alt={`${project.title} — ${project.subtitle || project.category} screenshot`}
-          loading="lazy"
-          decoding="async"
+          // Project cards sit in a 1–3 column grid, so never wider than about half the viewport.
+          sizes="(min-width: 1280px) 420px, (min-width: 768px) 45vw, 92vw"
           onLoad={(e) => setTall(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth > 0.9)}
           onError={() => setBroken(true)}
           className={cn("shot absolute inset-0", tall ? "shot-scroll" : "shot-zoom shot-wide")}

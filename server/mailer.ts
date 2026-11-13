@@ -597,7 +597,7 @@ export function leadEmails(lead: LeadMail, ctx: MailContext) {
       ctas: [
         { label: `Reply to ${first}`, href: mailtoHref(lead.email, `Re: Your enquiry with ${settings.name} [${lead.reference}]`), primary: true },
         { label: `WhatsApp ${first}`, href: clientWhatsapp(lead.phone, `Hi ${first}, this is ${settings.short} — thank you for your enquiry (${lead.reference}).`) },
-        { label: "Open admin console", href: siteUrl ? `${siteUrl}/#/admin` : "" },
+        { label: "Open admin console", href: siteUrl ? `${siteUrl}/admin` : "" },
       ],
       note: `Logged in Admin → Leads as **${lead.reference}**. Replying within the first few hours makes a strong first impression.`,
       footerNote: "Internal notification from your website.",
@@ -636,7 +636,7 @@ export function leadEmails(lead: LeadMail, ctx: MailContext) {
         { title: "Proposal", body: "After a short discovery call, you receive a written scope, timeline and fixed quote." },
       ],
       ctas: [
-        { label: "Book a free 30-min call", href: siteUrl ? `${siteUrl}/#/book` : "", primary: true },
+        { label: "Book a free 30-min call", href: siteUrl ? `${siteUrl}/book` : "", primary: true },
         { label: "Chat on WhatsApp", href: studioWhatsapp(settings, `Hi ${settings.short}! Following up on my enquiry ${lead.reference}.`), primary: !siteUrl },
       ],
       signature: true,

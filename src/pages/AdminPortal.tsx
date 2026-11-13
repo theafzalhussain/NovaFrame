@@ -201,7 +201,7 @@ function Login({ onAuthed }: { onAuthed: (u: AdminUser) => void }) {
           ) : null}
 
           <p className="mt-10 text-center text-[12px] text-smoke">
-            <a href="#/" className="hover:text-gold-200">
+            <a href="/" className="hover:text-gold-200">
               ← Back to {settings.short}
             </a>
           </p>
@@ -394,7 +394,7 @@ function Console({ user, onLogout }: { user: AdminUser; onLogout: () => void }) 
                 <span className={cn("h-1.5 w-1.5 rounded-full", demo ? "bg-gold-300" : "bg-sage animate-pulse-dot")} />
                 {demo ? "Demo workspace" : "Live database"}
               </span>
-              <a href="#/" target="_blank" rel="noreferrer" className="btn btn-line btn-sm">
+              <a href="/" target="_blank" rel="noreferrer" className="btn btn-line btn-sm">
                 <Icon name="external" className="h-4 w-4" /> <span className="hidden sm:inline">View site</span>
               </a>
             </div>

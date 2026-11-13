@@ -38,13 +38,44 @@ const DB_PATH = localDbPath();
  * and `npm run server` work offline without any Turso credentials.
  */
 export const usingTurso = Boolean(process.env.TURSO_DATABASE_URL);
+
+/**
+ * Optional embedded replica (`TURSO_EMBEDDED_REPLICA=1`).
+ *
+ * Normally every read in Turso mode is an HTTP round-trip to the primary. An embedded
+ * replica keeps a full local copy of the database on disk: reads are answered from that
+ * file in microseconds, while writes still go to the primary and are applied locally too
+ * (`readYourWrites`, on by default, so a value can be read back straight after writing).
+ *
+ * Off by default on purpose. It needs a writable filesystem and it pulls the whole
+ * database — including the `media` image blobs — on boot, which costs start-up time and
+ * disk. Turn it on when read latency matters more than cold-start time.
+ */
+const replicaEnabled = usingTurso && /^(1|true|yes)$/i.test(process.env.TURSO_EMBEDDED_REPLICA ?? "");
+const REPLICA_PATH = process.env.TURSO_REPLICA_PATH || path.join(__dirname, "turso-replica.db");
+/** Seconds between background pulls from the primary (picks up edits made elsewhere). */
+const SYNC_INTERVAL = Math.max(1, Number(process.env.TURSO_SYNC_INTERVAL || 60));
+
 if (!usingTurso) {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+} else if (replicaEnabled) {
+  fs.mkdirSync(path.dirname(REPLICA_PATH), { recursive: true });
 }
 
 export const db: Client = usingTurso
-  ? createClient({ url: process.env.TURSO_DATABASE_URL as string, authToken: process.env.TURSO_AUTH_TOKEN })
+  ? replicaEnabled
+    ? createClient({
+        url: `file:${REPLICA_PATH}`,
+        syncUrl: process.env.TURSO_DATABASE_URL as string,
+        authToken: process.env.TURSO_AUTH_TOKEN,
+        syncInterval: SYNC_INTERVAL,
+        readYourWrites: true,
+      })
+    : createClient({ url: process.env.TURSO_DATABASE_URL as string, authToken: process.env.TURSO_AUTH_TOKEN })
   : createClient({ url: `file:${DB_PATH}` });
+
+/** How the data layer is wired, for /api/health and the boot banner. */
+export const dbBackend = usingTurso ? (replicaEnabled ? "turso+replica" : "turso") : "sqlite";
 
 /** Day buckets for charts use the studio's offset (IST by default). */
 export const TZ_OFFSET_MINUTES = Number(process.env.TZ_OFFSET_MINUTES || 330);
@@ -62,9 +93,29 @@ export type Args = InArgs;
 /** Result of a write, shaped like better-sqlite3's `RunResult`. */
 export type RunResult = { changes: number; lastInsertRowid: number };
 
+/* ------------------------------------------------------------------ */
+/* Write tracking                                                     */
+/* ------------------------------------------------------------------ */
+/**
+ * Counter bumped whenever a statement writes to the two tables the public site
+ * reads from. `server/content.ts` caches the assembled site content in memory and
+ * uses this to notice its copy is stale the instant the admin saves something,
+ * without having to ask the database on every request.
+ */
+let revision = 0;
+const WRITES_PUBLIC_DATA = /\b(?:INSERT|UPDATE|DELETE|REPLACE)\b[\s\S]{0,200}?\b(?:content|settings)\b/i;
+
+/** Monotonic counter of writes to `content` / `settings` made by this process. */
+export const dataRevision = () => revision;
+
+function noteWrite(sql: string) {
+  if (WRITES_PUBLIC_DATA.test(sql)) revision++;
+}
+
 /** INSERT/UPDATE/DELETE. Returns affected-row count and the new rowid. */
 export async function run(sql: string, args?: Args): Promise<RunResult> {
   const rs = await db.execute(args === undefined ? sql : { sql, args });
+  noteWrite(sql);
   return {
     changes: rs.rowsAffected,
     lastInsertRowid: rs.lastInsertRowid === undefined ? 0 : Number(rs.lastInsertRowid),
@@ -86,6 +137,7 @@ export async function all<T>(sql: string, args?: Args): Promise<T[]> {
 /** Run a multi-statement SQL script (schema, migrations). */
 export async function exec(sql: string): Promise<void> {
   await db.executeMultiple(sql);
+  noteWrite(sql);
 }
 
 /**
@@ -95,6 +147,7 @@ export async function exec(sql: string): Promise<void> {
  */
 export async function tx(statements: Array<[string, Args?] | string>): Promise<void> {
   await db.batch(statements, "write");
+  for (const statement of statements) noteWrite(typeof statement === "string" ? statement : statement[0]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -447,7 +500,13 @@ const INDEX_SQL = `
   CREATE INDEX IF NOT EXISTS idx_events_time       ON events(created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_time        ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_content_listing   ON content(collection, published, sort_order);
+  /* Covering index for the published-content listing every page load depends on:
+     it carries the ORDER BY tiebreak and the row payload, so the query is answered
+     from the index alone — no table lookups and no sort step. */
+  CREATE INDEX IF NOT EXISTS idx_content_published ON content(collection, published, sort_order, created_at, id, data, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_content_updated   ON content(updated_at);
   CREATE INDEX IF NOT EXISTS idx_sessions_user     ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_sessions_expires  ON sessions(expires_at);
   CREATE INDEX IF NOT EXISTS idx_payments_status   ON payments(status);
   CREATE INDEX IF NOT EXISTS idx_payments_created  ON payments(created_at);
 `;
@@ -718,10 +777,31 @@ async function renameBrand(): Promise<void> {
 let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
 export async function initDb(): Promise<void> {
-  // libSQL/Turso manage journal + synchronous modes themselves; only the
-  // local file backend benefits from (and supports) a foreign-keys pragma.
+  // Turso's hosted protocol rejects write pragmas and manages journal + synchronous
+  // modes itself, so these only apply to a local file (development, and the embedded
+  // replica's local copy). They are the standard read-heavy SQLite settings:
+  //   WAL           — readers never block on the writer
+  //   NORMAL        — one fsync per checkpoint instead of per commit
+  //   cache_size    — 64 MB of page cache (negative value = KiB), so hot pages stay in RAM
+  //   mmap_size     — read pages straight from the page cache, skipping a copy
+  //   temp_store    — sorts and temp B-trees stay in memory
+  //   busy_timeout  — wait for a lock instead of failing instantly under concurrency
   if (!usingTurso) {
-    await db.execute("PRAGMA foreign_keys = ON");
+    for (const pragma of [
+      "PRAGMA journal_mode = WAL",
+      "PRAGMA synchronous = NORMAL",
+      "PRAGMA foreign_keys = ON",
+      "PRAGMA cache_size = -65536",
+      "PRAGMA mmap_size = 268435456",
+      "PRAGMA temp_store = MEMORY",
+      "PRAGMA busy_timeout = 5000",
+    ]) {
+      try {
+        await db.execute(pragma);
+      } catch (err) {
+        console.warn(`[db] ${pragma} not applied:`, (err as Error).message);
+      }
+    }
   }
 
   await exec(SCHEMA_SQL);

@@ -47,6 +47,9 @@ export default defineConfig({
     },
   },
   build: {
+    // Modern baseline: every browser that supports ES modules and `import()` (which this app
+    // requires anyway) also supports ES2022, so shipping down-levelled syntax only adds bytes.
+    target: "es2022",
     // Code-split output (dist/index.html + hashed files in dist/assets/). The home page loads only
     // what it needs; other pages, the admin console and the three.js hero load on demand.
     rollupOptions: {
@@ -54,12 +57,20 @@ export default defineConfig({
         manualChunks(id) {
           // Long-lived vendor files stay cached across deploys of the site's own code.
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
-          if (/[\\/]node_modules[\\/]three[\\/]/.test(id)) return "three";
+          if (/[\\/]node_modules[\\/]three[\\/]/.test(id)) {
+            // RoomEnvironment is only used by the "full" quality hero, and heroScene.ts imports
+            // it dynamically inside that branch — so phones never request this file.
+            if (/RoomEnvironment/.test(id)) return "three-env";
+            return "three";
+          }
         },
       },
     },
-    // three.js is one ~600 kB (≈150 kB gzipped) file, loaded lazily after the page is interactive.
+    // three.js is loaded lazily, after the page is interactive, and only on devices that
+    // will actually render the scene — so its size is not on the critical path.
     chunkSizeWarningLimit: 700,
+    // Skipping the gzip-size pass makes builds noticeably faster; sizes are checked in CI/manually.
+    reportCompressedSize: true,
   },
   server: {
     // `npm run dev` starts the API alongside this server and /api is proxied to it.

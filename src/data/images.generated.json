@@ -1,0 +1,113 @@
+{
+  "/brand/logo.png": {
+    "width": 512,
+    "height": 512,
+    "base": "/_img/brand-logo",
+    "widths": [
+      160,
+      320,
+      480,
+      512
+    ]
+  },
+  "/projects/eshopper.jpg": {
+    "width": 1600,
+    "height": 901,
+    "base": "/_img/projects-eshopper",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      960,
+      1280,
+      1600
+    ]
+  },
+  "/projects/moviezone.jpg": {
+    "width": 941,
+    "height": 1670,
+    "base": "/_img/projects-moviezone",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      941
+    ]
+  },
+  "/projects/portfolio.jpg": {
+    "width": 942,
+    "height": 1670,
+    "base": "/_img/projects-portfolio",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      942
+    ]
+  },
+  "/projects/the-chronicle.jpg": {
+    "width": 942,
+    "height": 1670,
+    "base": "/_img/projects-the-chronicle",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      942
+    ]
+  },
+  "/projects/world-explorer.jpg": {
+    "width": 942,
+    "height": 1670,
+    "base": "/_img/projects-world-explorer",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      942
+    ]
+  },
+  "/team/afzal-hussain.jpg": {
+    "width": 1215,
+    "height": 1295,
+    "base": "/_img/team-afzal-hussain",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      960,
+      1215
+    ]
+  },
+  "/team/om-gupta.jpg": {
+    "width": 864,
+    "height": 1184,
+    "base": "/_img/team-om-gupta",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      864
+    ]
+  },
+  "/team/vijay.jpg": {
+    "width": 1215,
+    "height": 1295,
+    "base": "/_img/team-vijay",
+    "widths": [
+      160,
+      320,
+      480,
+      640,
+      960,
+      1215
+    ]
+  }
+}

@@ -25,14 +25,16 @@ import {
   type CollectionName,
   type SiteSettings,
 } from "../src/data/types.js";
-import { defaultContent } from "../src/data/defaults.js";
 import { mailEnabled, mailBackend, notifyBooking, notifyLead, notifyPayment, verifyMail, type MailContext } from "./mailer.js";
 import Razorpay from "razorpay";
 import { recordRazorpayCommission, registerPartnerRoutes, resolveReferral } from "./partners.js";
+import { advancedSettings, deepMerge, getSiteContent, siteSettings } from "./content.js";
+import { buildRobots, buildSitemap, originFor, renderHtml } from "./seo.js";
 import {
   TZ_MOD,
   all,
   contentQ,
+  dbBackend,
   get,
   hashPassword,
   hashToken,
@@ -40,11 +42,9 @@ import {
   isCollection,
   newReference,
   parseRow,
-  readSetting,
   run,
   seedCollection,
   tx,
-  usingTurso,
   verifyPassword,
   writeSetting,
   type Args,
@@ -99,18 +99,8 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v ===
 const ipOf = (req: Request) => (req.ip ?? "").slice(0, 64);
 const uaOf = (req: Request) => String(req.headers["user-agent"] ?? "").slice(0, 300);
 
-function deepMerge<T>(base: T, override: unknown): T {
-  if (!isPlainObject(base) || !isPlainObject(override)) return (override ?? base) as T;
-  const out: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    const current = (base as Record<string, unknown>)[key];
-    out[key] = isPlainObject(current) && isPlainObject(value) ? deepMerge(current, value) : value;
-  }
-  return out as T;
-}
-
-const siteSettings = async () => deepMerge(defaultContent.settings, await readSetting<SiteSettings>("site"));
-const advancedSettings = async () => deepMerge(defaultContent.advanced, await readSetting<AdvancedSettings>("advanced"));
+/* `deepMerge`, `siteSettings` and `advancedSettings` live in ./content.js, where they are
+   backed by the in-memory content cache — see the note at the top of that file. */
 
 /** Public site URL for links inside emails (optional, e.g. https://webxstudio.me). */
 const SITE_URL = /^https?:\/\//i.test(process.env.SITE_URL ?? "") ? (process.env.SITE_URL as string).replace(/\/+$/, "") : undefined;
@@ -252,18 +242,34 @@ const ownerOnly = requireRole("owner");
 /* ------------------------------------------------------------------ */
 app.get("/api/health", async (_req, res) => {
   const { c } = (await get<{ c: number }>("SELECT count(*) AS c FROM content")) ?? { c: 0 };
-  ok(res, { service: "webxstudio-api", database: usingTurso ? "turso" : "sqlite", contentItems: c, time: new Date().toISOString() });
+  ok(res, { service: "webxstudio-api", database: dbBackend, contentItems: c, time: new Date().toISOString() });
 });
 
 async function publishedCollection(name: CollectionName) {
-  return (await contentQ.listPublished(name)).map((row) => parseRow(row).data);
+  return (await getSiteContent()).content.collections[name];
 }
 
-app.get("/api/content", async (_req, res) => {
-  const collections = Object.fromEntries(await Promise.all(COLLECTION_NAMES.map(async (name) => [name, await publishedCollection(name)])));
-  const { t } = (await contentQ.lastUpdate()) ?? { t: null };
+/**
+ * The whole public site in one response, served from the in-memory snapshot.
+ *
+ * The browser asks for this on every page load and every time a tab regains focus, so it
+ * carries a strong ETag: an unchanged site costs a 304 with no body instead of re-sending
+ * the entire payload. `no-cache` (not `no-store`) is deliberate — it lets the browser keep
+ * the copy and revalidate it, which is what makes the 304 possible.
+ */
+app.get("/api/content", async (req, res) => {
+  const { body, etag } = await getSiteContent();
   res.setHeader("Cache-Control", "no-cache");
-  ok(res, { settings: await siteSettings(), advanced: await advancedSettings(), collections, version: t ?? "" });
+  res.setHeader("ETag", etag);
+  res.setHeader("Vary", "Accept-Encoding");
+
+  // `If-None-Match` may carry a list, and a proxy may have weakened the tag to W/"...".
+  const inm = req.headers["if-none-match"];
+  if (inm) {
+    const tags = String(inm).split(",").map((t) => t.trim().replace(/^W\//, ""));
+    if (tags.includes(etag) || tags.includes("*")) return res.status(304).end();
+  }
+  res.type("application/json").send(body);
 });
 
 app.get("/api/content/:collection", async (req, res) => {
@@ -1595,10 +1601,36 @@ registerPartnerRoutes(app, {
 });
 
 /* ------------------------------------------------------------------ */
+/* SEO endpoints (registered before the SPA fallback below)           */
+/* ------------------------------------------------------------------ */
+/**
+ * Both are generated from the live database, so publishing a case study or an article
+ * lists it immediately. Cached for an hour at the edge but revalidated sooner by the
+ * `must-revalidate`-free `s-maxage`, which is the right trade for files crawlers fetch
+ * a few times a day.
+ */
+app.get("/sitemap.xml", async (req, res) => {
+  try {
+    const xml = await buildSitemap(originFor(req));
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+    res.type("application/xml").send(xml);
+  } catch (err) {
+    console.error("[seo] sitemap failed:", (err as Error).message);
+    res.status(500).type("text/plain").send("Sitemap unavailable");
+  }
+});
+
+app.get("/robots.txt", (req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.type("text/plain").send(buildRobots(originFor(req)));
+});
+
+/* ------------------------------------------------------------------ */
 /* Static frontend (optional: serves `npm run build` output)          */
 /* ------------------------------------------------------------------ */
 const distDir = path.resolve(__dirname, "..", "dist");
-if (fs.existsSync(path.join(distDir, "index.html"))) {
+const indexHtmlPath = path.join(distDir, "index.html");
+if (fs.existsSync(indexHtmlPath)) {
   const assetsDir = path.join(distDir, "assets") + path.sep;
   app.use(
     express.static(distDir, {
@@ -1607,16 +1639,41 @@ if (fs.existsSync(path.join(distDir, "index.html"))) {
       setHeaders(res, filePath) {
         // Build files carry a content hash in their name, so they can be cached for good;
         // the HTML that points at them must always be revalidated so a deploy shows up at once.
-        if (filePath.startsWith(assetsDir)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        else if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-cache");
+        if (filePath.startsWith(assetsDir)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-cache");
+        } else if (/[\\/]fonts[\\/].+\.woff2$/.test(filePath)) {
+          // Self-hosted fonts are stable: a change ships under a new filename.
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else if (/\.(?:png|jpe?g|webp|avif|gif|svg|ico)$/i.test(filePath)) {
+          // Images and icons: cache for a week, then revalidate in the background.
+          res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+        }
       },
     }),
   );
   // A build file that no longer exists (old tab after a deploy) is a real 404, not the HTML page.
   app.get(/^\/assets\//, (_req, res) => res.status(404).type("text/plain").send("Not found"));
-  app.get(/^\/(?!api\/).*/, (_req, res) => {
-    res.setHeader("Cache-Control", "no-cache");
-    res.sendFile(path.join(distDir, "index.html"));
+
+  /**
+   * Every other path gets the app shell — with this page's title, description, canonical
+   * URL, social cards and JSON-LD already in the HTML (see server/seo.ts). A path that
+   * matches no route is answered with a genuine 404 status so crawlers drop it instead of
+   * indexing a "page not found" screen as a real page.
+   */
+  app.get(/^\/(?!api\/).*/, async (req, res, next) => {
+    try {
+      const page = await renderHtml(indexHtmlPath, req.path, originFor(req));
+      if (!page) return next();
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Vary", "Accept-Encoding");
+      res.status(page.status).type("html").send(page.html);
+    } catch (err) {
+      console.error("[seo] render failed, serving the plain shell:", (err as Error).message);
+      res.setHeader("Cache-Control", "no-cache");
+      res.sendFile(indexHtmlPath);
+    }
   });
 }
 
@@ -1633,7 +1690,9 @@ await initDb();
 
 app.listen(PORT, () => {
   console.log(`\n  > WebXstudio API ready:  http://localhost:${PORT}/api/health`);
-  console.log(`  > Admin console:       http://localhost:5173/#/admin (dev) or this server's /#/admin`);
+  console.log(`  > Admin console:       http://localhost:5173/admin (dev) or this server's /admin`);
+  console.log(`  > Database:            ${dbBackend}`);
+  console.log(`  > Canonical origin:    ${process.env.SITE_URL || "(SITE_URL unset — using the request host; set it in production)"}`);
   console.log(`  > Email notifications: ${mailEnabled() ? `on (${mailBackend()})` : "off (set RESEND_API_KEY or SMTP_HOST to enable)"}`);
   console.log(`  > Online payments:     ${paymentsEnabled() ? `on (Razorpay ${paymentsTestMode() ? "TEST" : "LIVE"} mode)` : "off (set RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)"}\n`);
   if (mailEnabled()) {

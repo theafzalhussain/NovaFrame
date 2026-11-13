@@ -1,0 +1,65 @@
+# Apache config for the built site (Vite copies this file into dist/).
+# ---------------------------------------------------------------------
+# Only used on Apache hosts — cPanel, Hostinger and similar. When the Node server
+# (server/index.ts) is in front, it serves the app itself and this file is ignored.
+#
+# The site uses real URLs (/work/eshopper), not hash routes, so Apache has to hand
+# unknown paths to index.html instead of returning 404. Without this block every URL
+# except the home page would break on a static host.
+
+Options -MultiViews -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Leave the API folder alone — server/php/.htaccess routes those requests to api.php.
+  RewriteRule ^api/ - [L]
+
+  # Serve anything that really exists (hashed assets, fonts, images, robots.txt, sitemap.xml).
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Everything else is a client-side route: give it the app shell.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# AVIF and WebP need a correct Content-Type or browsers will refuse to decode them.
+<IfModule mod_mime.c>
+  AddType image/avif .avif
+  AddType image/webp .webp
+  AddType font/woff2 .woff2
+  AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml application/xml application/javascript application/json image/svg+xml
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Build output carries a content hash in its filename, and the generated images and
+  # self-hosted fonts only change under a new name — all safe to cache for a year.
+  SetEnvIf Request_URI "^/?assets/" WX_IMMUTABLE=1
+  SetEnvIf Request_URI "^/?_img/" WX_IMMUTABLE=1
+  SetEnvIf Request_URI "^/?fonts/" WX_IMMUTABLE=1
+  Header set Cache-Control "public, max-age=31536000, immutable" env=WX_IMMUTABLE
+
+  # The HTML points at those hashed files, so it must always be revalidated —
+  # otherwise a cached copy keeps asking for assets a new deploy has replaced.
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+
+  <FilesMatch "\.(xml|txt)$">
+    Header set Cache-Control "public, max-age=3600"
+  </FilesMatch>
+
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# Never serve the PHP backend's secrets or seed data.
+<FilesMatch "^(\.env.*|seed\.json|config\.php|schema\.sql)$">
+  Require all denied
+</FilesMatch>

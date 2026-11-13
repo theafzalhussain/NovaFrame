@@ -74,7 +74,7 @@ function LeadDrawer({ id, onClose, onChanged }: { id: number; onClose: () => voi
 
   const first = lead.name.split(" ")[0];
   const replySubject = `Re: your ${lead.service} enquiry (${lead.reference})`;
-  const replyBody = `Hi ${first},\n\nThank you for reaching out to ${settings.name} about your ${lead.service.toLowerCase()} project. I've read your brief and would love to learn more.\n\nWould you be free for a short call this week? You can pick a slot here: ${window.location.origin}${window.location.pathname}#/book\n\nBest regards,\n${settings.name}`;
+  const replyBody = `Hi ${first},\n\nThank you for reaching out to ${settings.name} about your ${lead.service.toLowerCase()} project. I've read your brief and would love to learn more.\n\nWould you be free for a short call this week? You can pick a slot here: ${window.location.origin}/book\n\nBest regards,\n${settings.name}`;
   const phoneDigits = (lead.phone ?? "").replace(/\D/g, "");
   const waNumber = phoneDigits.length === 10 ? `91${phoneDigits}` : phoneDigits;
 

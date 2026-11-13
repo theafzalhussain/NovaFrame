@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Icon } from "../components/Icons";
+import Picture from "../components/Picture";
 import { Button, PageHero, Reveal } from "../components/ui";
 import type { Insight } from "../data/types";
 import { useContent } from "../lib/content";
-import { resolveMediaUrl } from "../lib/media";
 import { Link } from "../lib/router";
 import { prettyDate } from "../lib/site";
 import { cn } from "../utils/cn";
@@ -85,11 +85,11 @@ export function InsightsPage() {
                   </div>
                   <div className="relative flex items-center gap-3.5 border-t border-gold-300/10 pt-6">
                     {leadAuthor?.photo ? (
-                      <img
-                        src={resolveMediaUrl(leadAuthor.photo)}
+                      <Picture
+                        src={leadAuthor.photo}
                         alt={lead.author}
+                        sizes="48px"
                         className="h-12 w-12 rounded-full border border-gold-300/30 object-cover object-top"
-                        loading="lazy"
                       />
                     ) : (
                       <span className="grid h-12 w-12 place-items-center rounded-full border border-gold-300/30 bg-ink-900 text-gold">
@@ -146,7 +146,7 @@ export function InsightArticle({ article }: { article: Insight }) {
           <p className="mt-6 text-[18px] leading-relaxed text-sand">{article.excerpt}</p>
           <div className="mt-9 flex items-center gap-3.5 border-t border-gold-300/10 pt-6">
             {founder?.photo ? (
-              <img src={resolveMediaUrl(founder.photo)} alt="" className="h-11 w-11 rounded-full border border-gold-300/30 object-cover object-top" />
+              <Picture src={founder.photo} alt="" sizes="44px" className="h-11 w-11 rounded-full border border-gold-300/30 object-cover object-top" />
             ) : null}
             <div>
               <p className="text-[14px] font-semibold text-ivory">{article.author}</p>

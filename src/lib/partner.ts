@@ -411,8 +411,7 @@ export const partnerAdmin = {
 /* ------------------------------------------------------------------ */
 /** The link a partner shares. Works on any deployment because the router is hash-based. */
 export function referralLink(code: string) {
-  const { origin, pathname } = window.location;
-  return `${origin}${pathname}#/?ref=${encodeURIComponent(code)}`;
+  return `${window.location.origin}/?ref=${encodeURIComponent(code)}`;
 }
 
 export function shareTargets(link: string, brand: string) {

@@ -56,7 +56,9 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 | `npm run dev` | API + Vite dev server together (:4000 and :5173). Ctrl+C stops both |
 | `npm run dev:web` | Only the Vite dev server. `/api` is proxied to `API_PROXY_TARGET` (default `http://localhost:4000`) |
 | `npm run server` / `server:watch` | Node API on `PORT` (default 4000); the watch variant reloads on change |
-| `npm run build` | Production build → `dist/`: `index.html`, content-hashed, code-split files in `dist/assets/`, plus `public/` (fonts, images) |
+| `npm run build` | Production build → `dist/`: `index.html`, content-hashed, code-split files in `dist/assets/`, plus `public/` (fonts, images). Runs `images` before and `build-seo` after |
+| `npm run images` / `images:force` | Re-encode every JPEG/PNG in `public/` as AVIF + WebP at six widths into `public/_img/`, and refresh `src/data/images.generated.json`. Idempotent; `:force` re-encodes everything |
+| `npm run seo:check` | Crawl every route on a running server and fail on a missing/duplicate title, a bad canonical, invalid JSON-LD or a dead sitemap URL. `-- https://host` to check production |
 | `npm run preview` | Serve the build locally (also proxies `/api`) |
 | `npm start` | Build, then serve site **and** API from one Node process on `PORT` |
 | `npm run typecheck` | Strict TypeScript check for the web app and the server |
@@ -71,9 +73,10 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
 
 ## What's inside
 
-**Website** (hash routes):
+**Website** (clean URLs, e.g. `/work/eshopper`):
 - Pages: `/` · `/services` and `/services/:id` · `/work` and `/work/:id` (case studies) · `/pricing` · `/studio` · `/tech-stack` · `/insights` and `/insights/:id` · `/contact` · `/book` · `/pay` · `/earn` (Student Partner program) · `/partner` (partner dashboard) · `/confirmation` · `/privacy` · `/terms` · `/sitemap`
-- Unknown paths show a helpful 404.
+- Unknown paths show a helpful 404, served with a real HTTP 404 status so crawlers drop them.
+- Old `#/...` links (bookmarks, links in sent emails, anything already indexed) are rewritten to the clean path on arrival, so nothing that used to work breaks.
 - **Real work:** eShopper, MovieZone, The Chronicle, World Explorer, the founder portfolio and SAARTHI, with live links, repos and screenshots.
 - **Conversion tools:**
   - Booking calendar with live availability and double-booking protection, plus `.ics` and Google Calendar links
@@ -86,7 +89,7 @@ npm run admin:reset -- --email you@example.com --password "a-new-long-password"
   - Live "studio online" status based on working hours
 - **No invented social proof:** testimonials ship empty and the section stays hidden until you add real ones.
 
-**Admin console** (`/#/admin`):
+**Admin console** (`/admin`):
 
 | Section | What you can do | Min. role |
 |---|---|---|
@@ -123,6 +126,44 @@ Copy `.env.example` → `.env` (git-ignored; `server/.env` also works). Every va
 | `SMTP_HOST` `SMTP_PORT` `SMTP_SECURE` `SMTP_USER` `SMTP_PASS` | — | Enables email notifications |
 | `MAIL_FROM` / `NOTIFY_EMAIL` | site email | Sender address, and the inbox that receives alerts |
 | `SEND_CONFIRMATIONS` | `true` | Set `false` to stop confirmation emails to clients |
+| `SITE_URL` | *(request host)* | **Set this in production.** Pins every canonical URL, `og:url` and sitemap entry to one origin, so the same page reached via `*.onrender.com` or a bare-vs-www mismatch cannot be indexed twice. Also used for links in emails, and required by `postbuild` to emit a static `dist/sitemap.xml` |
+| `TURSO_EMBEDDED_REPLICA` | off | `1` keeps a local copy of the Turso database on disk so reads are local instead of a network round-trip. Needs a writable filesystem and pulls the whole database on boot |
+| `TURSO_SYNC_INTERVAL` | `60` | Seconds between background pulls from the Turso primary |
+| `CONTENT_CACHE_TTL_MS` | `5000` | How long the in-memory site-content cache may go without re-checking the stored version. Admin edits apply immediately regardless |
+
+---
+
+## Performance and SEO
+
+Each page has its own URL, and the Node server fills in that page's metadata **before** sending the
+HTML — so crawlers and link-preview scrapers, which never run the app's JavaScript, read real tags.
+
+- **One source of truth for metadata.** `src/lib/seo.ts` turns a path plus the live content into a
+  title, description, canonical URL, Open Graph/Twitter card and JSON-LD. The browser applies it on
+  navigation (`src/lib/useSeo.ts`); the server injects the same result into `index.html`
+  (`server/seo.ts`), between the `<!-- seo:start -->` / `<!-- seo:end -->` markers. They cannot drift.
+- **Structured data** per page type: `ProfessionalService` everywhere, plus `WebSite` and `FAQPage`
+  on the home page, `Service` with an `Offer` (and its starting price) on service pages,
+  `CreativeWork` on case studies, `BlogPosting` on articles, `FAQPage` + `OfferCatalog` on pricing,
+  and a `BreadcrumbList` on everything below the top level.
+- **`/sitemap.xml` and `/robots.txt`** are generated from the database, so publishing a case study
+  lists it immediately, with a per-item `<lastmod>`. `postbuild` also writes static copies into
+  `dist/` for static or PHP hosting (needs `SITE_URL`).
+- **Duplicate paths** (`/portfolio`, `/about`, `/capabilities`) still render, but point their
+  canonical tag at one address so they never compete with it.
+- **Private pages** (`/admin`, `/partner`, `/pay`, `/confirmation`) are `noindex` and disallowed in
+  `robots.txt`. Unknown paths return a real 404.
+- **Images** are re-encoded to AVIF and WebP at six widths by `npm run images`, and `<Picture>`
+  serves the smallest file that fits the display size with `width`/`height` set to keep layout
+  shift at zero. The home page's images went from ~580 kB to ~19 kB.
+- **Site content is cached in memory** and served with a strong ETag, so a repeat visit costs a
+  `304` with no body instead of ~50 kB and ~16 database queries. An admin save invalidates it at once.
+- **three.js** stays out of the main bundle: it is fetched only once the hero is on screen, the page
+  has loaded and gone idle, and only on devices that will render it. Phones get a lighter scene,
+  Data Saver and very low-memory devices get static artwork, and the scene steps its own quality
+  down if it measures frames it cannot deliver.
+
+Verify any deployment with `npm run seo:check -- https://your-host`.
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | — | Enables online payments. `rzp_test_…` keys = test mode, `rzp_live_…` = real money |
 | `PAYMENT_CURRENCY` | `INR` | Currency for Razorpay orders |
 | `RAZORPAY_WEBHOOK_SECRET` | — | Optional. Enables `POST /api/payments/webhook` (see below) |

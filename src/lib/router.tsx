@@ -11,9 +11,19 @@ import {
 } from "react";
 
 /**
- * Tiny hash router: `#/work/eshopper?tab=x`.
- * Hashes that don't start with "/" (e.g. `#main`) are treated as in-page
- * anchors — the route is kept and the element is scrolled into view.
+ * Clean-path router: `/work/eshopper?tab=x`.
+ *
+ * The site used to run on hash routes (`#/work/eshopper`). Search engines drop the
+ * fragment before fetching, so every page collapsed into a single indexable URL ("/").
+ * Real paths give each page its own URL, which is what makes per-page titles,
+ * descriptions, canonicals and the XML sitemap count for anything.
+ *
+ * `<Link>` renders an ordinary `<a href="/work/eshopper">`, so crawlers follow it and
+ * middle-click / ctrl-click / "open in new tab" behave the way visitors expect.
+ *
+ * Old `#/...` links (bookmarks, already-indexed URLs, links inside sent emails) are
+ * rewritten to the clean path on arrival, so nothing that used to work breaks.
+ * A bare `#section` is still treated as an in-page anchor.
  */
 export type RouterValue = {
   path: string;
@@ -29,49 +39,76 @@ const RouterContext = createContext<RouterValue>({
   navigate: () => {},
 });
 
+/** Strips a trailing slash so "/services/" and "/services" are one route (and one URL). */
+function normalize(pathname: string) {
+  const clean = pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
+  return clean || "/";
+}
+
+/**
+ * Rewrites a legacy `#/path` URL to the real path before React first renders, so the
+ * address bar, the canonical tag and analytics all agree on one URL. Returns the hash
+ * that was carried over (e.g. "#main"), which the caller scrolls to after mount.
+ */
+function migrateLegacyHash(): string {
+  if (typeof window === "undefined") return "";
+  const raw = window.location.hash.replace(/^#/, "");
+  if (!raw.startsWith("/")) return window.location.hash;
+  const [pathname, search = ""] = raw.split("?");
+  const target = normalize(pathname);
+  // A referral code may sit in front of the hash (`/?ref=X#/book`) — keep both sets of params.
+  const merged = new URLSearchParams(window.location.search);
+  for (const [key, value] of new URLSearchParams(search)) merged.set(key, value);
+  const qs = merged.toString();
+  window.history.replaceState(null, "", `${target}${qs ? `?${qs}` : ""}`);
+  return "";
+}
+
+const carriedHash = migrateLegacyHash();
+
 function readLocation(): { path: string; search: string } {
   if (typeof window === "undefined") return { path: "/", search: "" };
-  const raw = window.location.hash.replace(/^#/, "");
-  if (!raw.startsWith("/")) return { path: "/", search: "" };
-  const [pathname, search = ""] = raw.split("?");
-  const clean = pathname.length > 1 ? pathname.replace(/\/+$/, "") : "/";
-  return { path: clean || "/", search };
+  return { path: normalize(window.location.pathname), search: window.location.search.replace(/^\?/, "") };
 }
 
 export function RouterProvider({ children }: { children: ReactNode }) {
   const [loc, setLoc] = useState(readLocation);
   const pathRef = useRef(loc.path);
   pathRef.current = loc.path;
+  // Only the very first route render should keep the scroll position the browser restored
+  // (or jump to an anchor carried over from a legacy hash URL).
+  const firstRender = useRef(true);
 
   useEffect(() => {
-    const onHash = () => {
-      const raw = window.location.hash.replace(/^#/, "");
-      if (raw && !raw.startsWith("/")) {
-        window.history.replaceState(null, "", `#${pathRef.current}`);
-        scrollToId(decodeURIComponent(raw));
-        return;
-      }
-      setLoc(readLocation());
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    // Back / forward buttons.
+    const onPop = () => setLoc(readLocation());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
   const navigate = useCallback((to: string, opts?: { replace?: boolean }) => {
-    const current = window.location.hash.replace(/^#/, "") || "/";
-    if (current === to) {
+    const [rawPath, rawQuery = ""] = to.split("?");
+    const [search, hash = ""] = rawQuery.split("#");
+    const target = normalize(rawPath.startsWith("/") ? rawPath : `/${rawPath}`);
+    const url = `${target}${search ? `?${search}` : ""}${hash ? `#${hash}` : ""}`;
+    const current = `${window.location.pathname}${window.location.search}`;
+
+    if (current === url) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (opts?.replace) {
-      window.history.replaceState(null, "", `#${to}`);
-      setLoc(readLocation());
-    } else {
-      window.location.hash = to;
-    }
+    window.history[opts?.replace ? "replaceState" : "pushState"](null, "", url);
+    setLoc(readLocation());
+    if (hash) scrollToId(decodeURIComponent(hash));
   }, []);
 
   useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      const anchor = (carriedHash || window.location.hash).replace(/^#/, "");
+      if (anchor) requestAnimationFrame(() => scrollToId(decodeURIComponent(anchor)));
+      return;
+    }
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [loc.path]);
 
@@ -94,14 +131,18 @@ export function useRouter() {
 
 type LinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { to: string };
 
+/**
+ * An in-app link. The `href` is the real path, so it is crawlable and can be opened in a
+ * new tab; a plain left-click is handled in the page without a round trip to the server.
+ */
 export function Link({ to, children, onClick, ...rest }: LinkProps) {
   const { navigate } = useRouter();
   return (
     <a
-      href={`#${to}`}
+      href={to}
       onClick={(event) => {
         onClick?.(event);
-        if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+        if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
         event.preventDefault();
         navigate(to);
       }}
@@ -113,7 +154,7 @@ export function Link({ to, children, onClick, ...rest }: LinkProps) {
 }
 
 /**
- * Smooth-scroll to an element on the current page (hash-router safe).
+ * Smooth-scroll to an element on the current page.
  * Off-screen page sections skip rendering (`content-visibility: auto`) and only carry estimated
  * heights, so they are rendered for the duration of the scroll — otherwise a long scroll on a phone
  * would land short of its target.

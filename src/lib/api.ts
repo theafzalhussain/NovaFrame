@@ -97,7 +97,7 @@ export function captureReferral(value: string | null | undefined) {
   } catch {
     /* storage unavailable — still record the click */
   }
-  const path = window.location.hash.replace(/^#/, "").split("?")[0] || "/";
+  const path = window.location.pathname || "/";
   void request("POST", "/partners/click", { code, sid: sessionId(), path, referrer: document.referrer ? hostOfReferrer() : "" }, { fallback: false });
 }
 
@@ -285,7 +285,7 @@ function sessionId() {
 
 export function track(name: string, meta?: Record<string, unknown>) {
   if (typeof navigator !== "undefined" && navigator.doNotTrack === "1") return;
-  const path = window.location.hash.replace(/^#/, "") || "/";
+  const path = `${window.location.pathname}${window.location.search}` || "/";
   if (path.startsWith("/admin") || path.startsWith("/portal")) return;
   let referrer = "";
   try {
