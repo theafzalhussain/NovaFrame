@@ -776,6 +776,82 @@ async function renameBrand(): Promise<void> {
 
 let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
+/* ------------------------------------------------------------------ */
+/* One-time copy edits to shipped content                             */
+/* ------------------------------------------------------------------ */
+/**
+ * Shortened summaries whose old wording ran past the ~158 characters Google shows in a search
+ * result, so the meta description built from them was clipped (`npm run seo:check` warned).
+ *
+ * Each edit runs once per database (tracked in settings.copy_fixes) and only replaces a field
+ * that still holds exactly the old text, so anything already rewritten in the admin console
+ * is left alone.
+ */
+const COPY_FIXES: { key: string; collection: CollectionName; id: string; field: string; from: string; to: string }[] = [
+  {
+    key: "2026-11-saarthi-summary",
+    collection: "projects",
+    id: "saarthi",
+    field: "summary",
+    from: "A lightweight personal AI agent that understands Hinglish and safely controls your devices — running on a local model, on modest hardware, with no API key required.",
+    to: "A lightweight personal AI agent that understands Hinglish and safely controls your devices — on a local model and modest hardware, no API key needed.",
+  },
+  {
+    key: "2026-11-meridian-summary",
+    collection: "projects",
+    id: "meridian-weather",
+    field: "summary",
+    from: "Meridian is a responsive weather dashboard combining live conditions, city search, interactive forecast charts, air-quality information and radar maps in one interface.",
+    to: "Meridian is a responsive weather dashboard with live conditions, city search, interactive forecast charts, air-quality data and radar maps in one place.",
+  },
+  {
+    key: "2026-11-pwa-article-excerpt",
+    collection: "insights",
+    id: "pwa-that-survives-its-api",
+    field: "excerpt",
+    from: "MovieZone never calls TMDB from the browser. A proxy with coalescing, retries and a 24-hour stale cache keeps the app useful even when the upstream is struggling.",
+    to: "MovieZone never calls TMDB from the browser. A proxy with coalescing, retries and a 24-hour stale cache keeps the app useful when the upstream struggles.",
+  },
+];
+
+const squashSpace = (s: unknown) => (typeof s === "string" ? s.replace(/\s+/g, " ").trim() : s);
+
+export async function applyCopyFixes(): Promise<string[]> {
+  const row = await get<{ value: string }>("SELECT value FROM settings WHERE key = ?", ["copy_fixes"]);
+  const done = new Set<string>(row ? (JSON.parse(row.value) as string[]) : []);
+  const applied: string[] = [];
+  let changed = false;
+
+  for (const fix of COPY_FIXES) {
+    if (done.has(fix.key)) continue;
+    const item = await get<{ data: string }>("SELECT data FROM content WHERE collection = ? AND id = ?", [fix.collection, fix.id]);
+    if (item) {
+      const data = JSON.parse(item.data) as Record<string, unknown>;
+      if (squashSpace(data[fix.field]) === fix.from) {
+        data[fix.field] = fix.to;
+        await run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE collection = ? AND id = ?", [
+          JSON.stringify(data),
+          fix.collection,
+          fix.id,
+        ]);
+        applied.push(`${fix.collection}/${fix.id}.${fix.field}`);
+      }
+    }
+    done.add(fix.key);
+    changed = true;
+  }
+
+  if (changed) {
+    await run(
+      `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      ["copy_fixes", JSON.stringify([...done])],
+    );
+  }
+  if (applied.length) console.log(`[content] Shortened ${applied.length} summaries: ${applied.join(", ")}`);
+  return applied;
+}
+
 export async function initDb(): Promise<void> {
   // Turso's hosted protocol rejects write pragmas and manages journal + synchronous
   // modes itself, so these only apply to a local file (development, and the embedded
@@ -870,6 +946,7 @@ export async function initDb(): Promise<void> {
   if (!(await readSetting("site"))) await writeSetting("site", defaultContent.settings);
   if (!(await readSetting("advanced"))) await writeSetting("advanced", defaultContent.advanced);
   await renameBrand();
+  await applyCopyFixes();
 
   /* ---- Owner-account bootstrap ---- */
   const adminCount = (await get<{ c: number }>("SELECT count(*) AS c FROM admin_users"))?.c ?? 0;

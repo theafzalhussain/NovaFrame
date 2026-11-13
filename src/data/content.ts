@@ -365,7 +365,7 @@ export const projects: Project[] = [
     ],
     featured: true,
     summary:
-      "A lightweight personal AI agent that understands Hinglish and safely controls your devices — running on a local model, on modest hardware, with no API key required.",
+      "A lightweight personal AI agent that understands Hinglish and safely controls your devices — on a local model and modest hardware, no API key needed.",
     problem:
       "Global assistants stumble on code-mixed Hindi-English — task success drops sharply when people speak the way hundreds of millions of Indians actually do. Most agents also need a cloud API key and a powerful machine.",
     solution:

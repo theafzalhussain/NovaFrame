@@ -24,11 +24,16 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  CubeUVReflectionMapping,
+  DataTexture,
   DirectionalLight,
   Group,
+  HalfFloatType,
   InstancedMesh,
   Line,
   LineBasicMaterial,
+  LinearFilter,
+  LinearSRGBColorSpace,
   Matrix4,
   Mesh,
   MeshMatcapMaterial,
@@ -40,6 +45,7 @@ import {
   Points,
   PointsMaterial,
   Quaternion,
+  RGBAFormat,
   SRGBColorSpace,
   Scene,
   SphereGeometry,
@@ -62,6 +68,50 @@ type Options = {
 };
 
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * The "full" scene's reflection map, baked in a worker (see pmremWorker.ts) so the page stays
+ * responsive. Resolves to null when the browser can't (no OffscreenCanvas WebGL 2 in workers,
+ * no float read-back, or it takes too long); the caller then bakes it on the main thread.
+ */
+function bakeEnvironmentOffThread(timeoutMs = 12000): Promise<DataTexture | null> {
+  if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL("./pmremWorker.ts", import.meta.url), { type: "module" });
+    } catch {
+      resolve(null);
+      return;
+    }
+    let settled = false;
+    const finish = (texture: DataTexture | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      worker.terminate();
+      resolve(texture);
+    };
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    worker.onerror = () => finish(null);
+    worker.onmessage = (e: MessageEvent<{ width?: number; height?: number; data?: Uint16Array; error?: string }>) => {
+      const { width, height, data } = e.data ?? {};
+      if (!width || !height || !data || data.length !== width * height * 4) return finish(null);
+      // Same layout and sampling as the render target PMREMGenerator returns, so three.js uses it
+      // as a ready-made cube-UV environment map without converting it again.
+      const texture = new DataTexture(data, width, height, RGBAFormat, HalfFloatType);
+      // @types/three leaves the cube-UV mapping out of its `Mapping` union; three.js itself accepts it.
+      (texture as { mapping: number }).mapping = CubeUVReflectionMapping;
+      texture.magFilter = LinearFilter;
+      texture.minFilter = LinearFilter;
+      texture.generateMipmaps = false;
+      texture.colorSpace = LinearSRGBColorSpace;
+      texture.needsUpdate = true;
+      finish(texture);
+    };
+    worker.postMessage(null);
+  });
+}
 
 /** Builds the scene inside `mount` and returns a cleanup function (safe to call at any time). */
 export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady, onFail }: Options): () => void {
@@ -123,12 +173,22 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     // it from `three/src/...` instead would bundle a second copy of half the library.)
     const scene = new Scene();
     if (!lite) {
-      const { RoomEnvironment } = await import("three/examples/jsm/environments/RoomEnvironment.js");
-      if (disposed) return;
-      const pmrem = track(new PMREMGenerator(gl));
-      const room = new RoomEnvironment();
-      scene.environment = track(pmrem.fromScene(room, 0.04).texture);
-      (room as unknown as { dispose?: () => void }).dispose?.();
+      const baked = await bakeEnvironmentOffThread();
+      if (disposed) {
+        baked?.dispose();
+        return;
+      }
+      if (baked) {
+        scene.environment = track(baked);
+      } else {
+        // Fallback: bake on the main thread (blocks for a moment while the shaders compile).
+        const { RoomEnvironment } = await import("three/examples/jsm/environments/RoomEnvironment.js");
+        if (disposed) return;
+        const pmrem = track(new PMREMGenerator(gl));
+        const room = new RoomEnvironment();
+        scene.environment = track(pmrem.fromScene(room, 0.04).texture);
+        (room as unknown as { dispose?: () => void }).dispose?.();
+      }
       await nextTask();
       if (disposed) return;
     }

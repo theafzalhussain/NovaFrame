@@ -65,7 +65,7 @@ export const insights: Insight[] = [
     id: "pwa-that-survives-its-api",
     title: "Your PWA should keep working when your API doesn't",
     excerpt:
-      "MovieZone never calls TMDB from the browser. A proxy with coalescing, retries and a 24-hour stale cache keeps the app useful even when the upstream is struggling.",
+      "MovieZone never calls TMDB from the browser. A proxy with coalescing, retries and a 24-hour stale cache keeps the app useful when the upstream struggles.",
     category: "Engineering",
     date: "2026-08-30",
     readTime: "7 min read",
