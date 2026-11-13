@@ -11,6 +11,7 @@ function Cell({ value, highlight }: { value: CompareValue; highlight: boolean })
           "mx-auto grid h-7 w-7 place-items-center rounded-full",
           highlight ? "bg-gradient-to-b from-gold-200 to-gold-500 text-ink-950 shadow-[0_6px_18px_-6px_rgba(212,173,102,0.9)]" : "border border-gold-300/30 text-gold-300",
         )}
+        role="img"
         aria-label="Yes"
       >
         <Icon name="check" className="h-3.5 w-3.5" strokeWidth={2.6} />
@@ -19,13 +20,13 @@ function Cell({ value, highlight }: { value: CompareValue; highlight: boolean })
   }
   if (value === "partial") {
     return (
-      <span className="mx-auto block w-fit rounded-full border border-gold-300/15 px-2.5 py-0.5 font-mono text-[10px] tracking-wide text-mist" aria-label="Sometimes">
+      <span className="mx-auto block w-fit rounded-full border border-gold-300/15 px-2.5 py-0.5 font-mono text-[10px] tracking-wide text-mist">
         varies
       </span>
     );
   }
   return (
-    <span className="mx-auto grid h-7 w-7 place-items-center text-smoke" aria-label="No">
+    <span className="mx-auto grid h-7 w-7 place-items-center text-smoke" role="img" aria-label="No">
       <Icon name="minus" className="h-4 w-4" />
     </span>
   );

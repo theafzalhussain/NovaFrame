@@ -10,10 +10,13 @@ function pickQuality(): HeroQuality | null {
   if (prefersLowData()) return null; // Data Saver / 2G: skip the 3D engine download entirely
   const memory = (navigator as Nav).deviceMemory ?? 8;
   if (memory <= 2) return null;
+  // Phones and small tablets get the static artwork. There the scene sits at 45% opacity behind the
+  // headline, yet building and running it cost a mid-range phone about 1.5 s of blocked main thread
+  // (Lighthouse mobile: Total Blocking Time ~2 s with it, ~0.5 s without).
+  if (window.innerWidth < 1024) return null;
   const lowEnd = memory <= 4 || (navigator.hardwareConcurrency || 8) <= 4;
-  // Phones and small tablets (and anything low-end) get the light version; desktops, laptops and
-  // large tablets the full one.
-  return lowEnd || window.innerWidth < 1024 ? "lite" : "full";
+  // Low-end laptops and large tablets get the light version; everything else the full one.
+  return lowEnd ? "lite" : "full";
 }
 
 function StaticArmillary() {

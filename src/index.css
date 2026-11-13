@@ -108,7 +108,8 @@
   --color-parchment: #ddd5c6;
   --color-sand: #c2baab;
   --color-mist: #9b9385;
-  --color-smoke: #6d665c;
+  /* 4.7:1 on ink-950 (was #6d665c, 3.55:1, below the WCAG AA 4.5:1 minimum for small text) */
+  --color-smoke: #807a6f;
 
   --color-sage: #8fc4a2;
   --color-ember: #e48a6c;
@@ -949,12 +950,18 @@
   .rotator > span[data-state="prev"] {
     opacity: 0;
     transform: translateY(-38%);
-    filter: blur(8px);
   }
   .rotator > span[data-state="next"] {
     opacity: 0;
     transform: translateY(38%);
-    filter: blur(8px);
+  }
+  /* The blur on the hidden words is desktop-only: re-filtering headline-sized text on every
+     swap cost phones around a second of blocked main thread per page load. */
+  @media (min-width: 1024px) {
+    .rotator > span[data-state="prev"],
+    .rotator > span[data-state="next"] {
+      filter: blur(8px);
+    }
   }
 
   /* ---------- Motion ---------- */

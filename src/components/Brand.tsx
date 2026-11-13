@@ -46,15 +46,18 @@ export function BrandMark({ size = 38, className }: { size?: number; className?:
  */
 export function Logo({ compact = false, className }: { compact?: boolean; className?: string }) {
   return (
-    <Link to="/" className={cn("group flex items-center gap-3", className)} aria-label="WebXstudio — home">
+    <Link to="/" className={cn("group flex items-center gap-3", className)} aria-label={compact ? "WebXstudio home" : undefined}>
       <BrandMark size={38} className="transition-transform duration-700 group-hover:rotate-[-6deg]" />
       {!compact && (
+        // The visible wordmark is the link's name (screen readers hear "WebX. Studio, home"),
+        // so voice-control users can say what they see.
         <span className="flex flex-col leading-none">
           <span className="font-display text-[20px] [font-weight:420] tracking-[-0.01em] text-ivory">
             Web<span className="text-gold-300">X</span>
             <span className="text-gold-400">.</span>
           </span>
           <span className="mt-[5px] font-mono text-[8.5px] tracking-[0.42em] text-mist uppercase">Studio</span>
+          <span className="sr-only">, home</span>
         </span>
       )}
     </Link>

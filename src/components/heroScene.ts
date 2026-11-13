@@ -6,9 +6,9 @@
  *
  * Loaded on demand by <HeroCanvas>, so three.js stays out of the main bundle.
  *  - "full": desktops/laptops and large tablets — physically based metals, the original look.
- *  - "lite": phones, small tablets and low-end machines — matcap-shaded metals (no environment
- *    pre-render), lighter geometry, capped pixel ratio, no MSAA, 30 fps. On a phone the scene sits
- *    at 45% opacity behind the headline, so it reads the same at a fraction of the cost.
+ *  - "lite": low-end laptops and tablets — matcap-shaded metals (no environment pre-render),
+ *    lighter geometry, capped pixel ratio, no MSAA, 30 fps. (Phones get static artwork instead;
+ *    see pickQuality() in HeroCanvas.)
  *
  * Set-up is split into short tasks (and shaders compile asynchronously where the browser
  * supports it), so a tap that lands while the scene is starting is handled straight away.
