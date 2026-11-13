@@ -970,6 +970,10 @@
     opacity: 1;
     transform: none;
   }
+  /* Above-the-fold variant: starts with the first paint, no JavaScript involved. */
+  .reveal-now {
+    animation: reveal-now 1s var(--ease) both;
+  }
   .page-enter {
     animation: page-in 0.8s var(--ease) both;
   }
@@ -1180,6 +1184,16 @@
   }
   75% {
     transform: translate(-2%, -1%);
+  }
+}
+@keyframes reveal-now {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 @keyframes page-in {
@@ -1394,6 +1408,9 @@
     opacity: 1;
     transform: none;
     transition: none;
+  }
+  .reveal-now {
+    animation: none;
   }
   .rotator > span,
   .shot {

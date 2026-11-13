@@ -41,22 +41,36 @@ export function Reveal({
   delay = 0,
   className,
   as: Tag = "div",
+  immediate = false,
 }: {
   children: ReactNode;
   delay?: number;
   className?: string;
   as?: "div" | "li" | "section";
+  /**
+   * For above-the-fold content (the hero headline is the page's LCP element): animate in with
+   * plain CSS from the first paint instead of waiting for the observer and a React re-render,
+   * which on a throttled phone held the headline invisible for seconds.
+   */
+  immediate?: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
     const node = ref.current;
-    if (!node) return;
+    if (!node || immediate) return;
     return observeReveal(node, () => setShown(true));
-  }, []);
+  }, [immediate]);
 
   const Component = Tag as "div";
+  if (immediate) {
+    return (
+      <Component ref={ref} className={cn("reveal-now", className)} style={{ animationDelay: `${delay}ms` }}>
+        {children}
+      </Component>
+    );
+  }
   return (
     <Component ref={ref} className={cn("reveal", shown && "reveal-in", className)} style={{ transitionDelay: `${delay}ms` }}>
       {children}

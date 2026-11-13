@@ -72,16 +72,22 @@ export default function HeroCanvas({ className }: { className?: string }) {
     // can take a second or two), so it only starts when the hero is on screen, the page has loaded and
     // gone idle, and the visitor hasn't tapped, clicked, typed or scrolled for a little while.
     const QUIET_MS = 1200;
+    // On top of that, give the page a few seconds after `load`: the scene compiles shaders and
+    // builds geometry in long main-thread tasks, and on a mid-range phone starting it straight
+    // after load froze the first taps and pushed Total Blocking Time to several seconds.
+    const SETTLE_MS = quality === "lite" ? 3500 : 2000;
     const onInput = () => (lastInput = performance.now());
     const inputs = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const;
     inputs.forEach((t) => window.addEventListener(t, onInput, { passive: true, capture: true }));
 
     const begin = () => {
       if (started || cancelled || !visible) return;
-      const quietFor = performance.now() - lastInput;
-      if (quietFor < QUIET_MS) {
+      const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      const now = performance.now();
+      const wait = Math.max(QUIET_MS - (now - lastInput), (nav?.loadEventEnd || now) + SETTLE_MS - now);
+      if (wait > 0) {
         window.clearTimeout(retry);
-        retry = window.setTimeout(() => (cancelIdle = whenIdle(begin, { afterLoad: false })), QUIET_MS - quietFor);
+        retry = window.setTimeout(() => (cancelIdle = whenIdle(begin, { afterLoad: false })), wait);
         return;
       }
       started = true;

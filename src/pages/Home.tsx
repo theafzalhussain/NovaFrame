@@ -88,20 +88,20 @@ function Hero() {
 
       <div className="shell relative w-full">
         <div className="max-w-[47rem]">
-          <Reveal>
+          <Reveal immediate>
             <Eyebrow>{settings.hero.eyebrow}</Eyebrow>
           </Reveal>
-          <Reveal delay={90}>
+          <Reveal immediate delay={90}>
             <h1 className="display mt-8 text-[2.9rem] leading-[0.98] sm:text-[4.4rem] lg:text-[5.4rem]">
               {settings.hero.title}
               <br />
               <Rotator words={settings.hero.rotating} />
             </h1>
           </Reveal>
-          <Reveal delay={170}>
+          <Reveal immediate delay={170}>
             <p className="mt-8 max-w-xl text-[16.5px] leading-relaxed text-sand md:text-[19px] lg:[text-shadow:0_0_14px_rgb(8_7_6/0.95),0_0_32px_rgb(8_7_6/0.85)]">{settings.hero.subtitle}</p>
           </Reveal>
-          <Reveal delay={250}>
+          <Reveal immediate delay={250}>
             <div className="mt-11 flex flex-wrap items-center gap-3.5">
               <Button to="/book" size="lg" arrow track="hero_book">
                 Book a free strategy call
