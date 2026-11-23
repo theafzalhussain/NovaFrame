@@ -72,27 +72,110 @@ function Rotator({ words }: { words: string[] }) {
 /* ------------------------------------------------------------------ */
 /* Hero                                                               */
 /* ------------------------------------------------------------------ */
+/** Flagship products pinned to the hero, in this order. Missing ones are back-filled from other live projects. */
+const HERO_PROJECT_IDS = ["eshopper", "moviezone", "parikshio"];
+
+function heroProjects(projects: Project[]) {
+  const isLive = (p: Project) => /^https?:\/\//.test(p.liveUrl ?? "");
+  const pinned = HERO_PROJECT_IDS.map((id) => projects.find((p) => p.id === id)).filter((p): p is Project => Boolean(p && isLive(p)));
+  const rest = projects.filter((p) => isLive(p) && !pinned.includes(p));
+  return [...pinned, ...rest].slice(0, 3);
+}
+
+/** "Parikshio - Online Examination Platform" → "Parikshio" (the host line already says what it is). */
+const shortTitle = (title: string) => title.split(/\s+[-–—|:]\s+/)[0].trim();
+
+/** Soft gold light that follows the mouse across the hero. Mouse only; no React re-renders. */
+function useHeroSpotlight() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !window.matchMedia("(pointer: fine)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const host = el.parentElement;
+    if (!host) return;
+    let raf = 0;
+    let x = 0;
+    let y = 0;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") return;
+      const r = host.getBoundingClientRect();
+      x = e.clientX - r.left;
+      y = e.clientY - r.top;
+      if (!raf)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          el.style.setProperty("--hx", `${x}px`);
+          el.style.setProperty("--hy", `${y}px`);
+          el.style.opacity = "1";
+        });
+    };
+    const onLeave = () => (el.style.opacity = "0");
+    host.addEventListener("pointermove", onMove, { passive: true });
+    host.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      host.removeEventListener("pointermove", onMove);
+      host.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+  return ref;
+}
+
 function Hero() {
+  const spotlight = useHeroSpotlight();
   const { settings, collections } = useContent();
   const status = useStudioStatus();
-  const live = collections.projects.filter((p) => p.liveUrl).slice(0, 2);
+  const live = heroProjects(collections.projects);
   const pauseOffscreen = usePauseOffscreen(); // headline shimmer, floating cards and pulses stop once scrolled away
 
   return (
-    <section ref={pauseOffscreen} className="relative flex min-h-[100svh] items-center overflow-hidden pt-36 pb-20 lg:pt-32">
+    <section ref={pauseOffscreen} className="relative flex min-h-[100svh] items-center overflow-hidden pt-36 pb-24 lg:pt-32 lg:pb-28">
+      {/* Cursor spotlight (desktop mouse only) */}
+      <div
+        ref={spotlight}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 opacity-0 transition-opacity duration-700"
+        style={{ background: "radial-gradient(520px circle at var(--hx, 50%) var(--hy, 50%), rgb(227 200 140 / 0.07), transparent 65%)" }}
+      />
       <div className="pointer-events-none absolute inset-0 lg:left-[36%]">
         <HeroCanvas className="hero-canvas h-full w-full opacity-45 lg:opacity-100" />
       </div>
+      {/* Atmosphere: warm aura behind the instrument and a fine gold hairline grid that fades out */}
+      <div
+        className="pointer-events-none absolute inset-0 lg:left-[30%]"
+        aria-hidden
+        style={{
+          background:
+            "radial-gradient(ellipse 52% 58% at 62% 46%, rgb(212 173 102 / 0.14), transparent 70%), radial-gradient(ellipse 30% 30% at 80% 20%, rgb(227 200 140 / 0.06), transparent 70%)",
+        }}
+      />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.5] [mask-image:radial-gradient(ellipse_70%_60%_at_65%_45%,#000,transparent_75%)]"
+        aria-hidden
+        style={{
+          backgroundImage:
+            "linear-gradient(rgb(227 200 140 / 0.05) 1px, transparent 1px), linear-gradient(90deg, rgb(227 200 140 / 0.05) 1px, transparent 1px)",
+          backgroundSize: "72px 72px",
+        }}
+      />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-ink-950 via-ink-950/75 to-transparent lg:via-ink-950/30" aria-hidden />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-ink-950 to-transparent" aria-hidden />
 
       <div className="shell relative w-full">
         <div className="max-w-[47rem]">
           <Reveal immediate>
-            <Eyebrow>{settings.hero.eyebrow}</Eyebrow>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <Eyebrow>{settings.hero.eyebrow}</Eyebrow>
+              {/* Studio coordinates: a quiet nod to the instrument in the scene */}
+              <span className="hidden items-center gap-2 font-mono text-[10.5px] tracking-[0.18em] text-smoke md:inline-flex" aria-hidden>
+                <span className="h-1 w-1 rotate-45 bg-gold-400/70" />
+                {"28.61\u00b0N \u00b7 77.21\u00b0E"}
+              </span>
+            </div>
           </Reveal>
           <Reveal immediate delay={90}>
-            <h1 className="display mt-8 text-[2.9rem] leading-[0.98] sm:text-[4.4rem] lg:text-[5.4rem]">
+            <h1 className="display mt-8 text-[2.9rem] leading-[0.98] sm:text-[4.4rem] lg:text-[5.4rem] lg:[text-shadow:0_0_24px_rgb(8_7_6/0.9),0_0_60px_rgb(8_7_6/0.7)]">
               {settings.hero.title}
               <br />
               <Rotator words={settings.hero.rotating} />
@@ -110,7 +193,7 @@ function Hero() {
                 See live work
               </Button>
             </div>
-            <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-mist">
+            <div className="hero-meta mt-7 inline-flex flex-wrap items-center gap-x-4 gap-y-2 rounded-full px-4 py-2 text-[13px] text-mist">
               <span className="inline-flex items-center gap-2">
                 <StatusDot online={status.online} />
                 {availabilityLabel(settings)}
@@ -130,16 +213,38 @@ function Hero() {
         </div>
 
         <Reveal delay={330}>
-          <div className="mt-20 grid max-w-3xl grid-cols-2 gap-x-8 gap-y-10 border-t border-gold-300/10 pt-10 sm:grid-cols-4">
-            {settings.stats.map((s) => (
-              <Stat key={s.label} value={s.value} suffix={s.suffix} label={s.label} />
-            ))}
+          <div className="hero-instrument mt-16 max-w-3xl lg:mt-20">
+            <span className="hero-corner top-2.5 left-2.5 border-t border-l" aria-hidden />
+            <span className="hero-corner top-2.5 right-2.5 border-t border-r" aria-hidden />
+            <span className="hero-corner bottom-2.5 left-2.5 border-b border-l" aria-hidden />
+            <span className="hero-corner right-2.5 bottom-2.5 border-r border-b" aria-hidden />
+            <div className="grid grid-cols-2 sm:grid-cols-4">
+              {settings.stats.map((s, i) => (
+                <div
+                  key={s.label}
+                  className={cn(
+                    "relative px-6 pt-8 pb-7 sm:px-7",
+                    i % 2 === 1 && "border-l border-gold-300/[0.08]",
+                    i >= 2 && "border-t border-gold-300/[0.08] sm:border-t-0",
+                    i === 2 && "sm:border-l",
+                  )}
+                >
+                  <span className="absolute top-3.5 right-4 font-mono text-[9.5px] tracking-[0.2em] text-gold-300/45" aria-hidden>
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <Stat value={s.value} suffix={s.suffix} label={s.label} />
+                </div>
+              ))}
+            </div>
           </div>
         </Reveal>
       </div>
 
       {/* Live products floating over the sphere */}
-      <div className="absolute right-[5%] bottom-[16%] hidden flex-col gap-3 xl:flex">
+      <div className="absolute right-[4%] bottom-[10%] hidden w-[286px] flex-col gap-3 xl:flex">
+        <p className="label flex items-center gap-2 pl-1 text-[10px] text-gold-300/80">
+          <span className="h-px w-6 bg-gold-400/60" /> Live in production
+        </p>
         {live.map((p, i) => (
           <a
             key={p.id}
@@ -148,33 +253,33 @@ function Hero() {
             rel="noopener noreferrer"
             onClick={() => track("cta_click", { label: `hero_live_${p.id}` })}
             className={cn(
-              "lux-glass group flex w-[270px] items-center gap-3.5 rounded-2xl px-4 py-3.5 transition hover:border-gold-300/40",
-              i === 0 ? "animate-floaty" : "animate-floaty-slow translate-x-10",
+              "lux-glass group relative flex items-center gap-3.5 overflow-hidden rounded-2xl px-4 py-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-gold-300/45 hover:shadow-[0_18px_50px_-18px_rgb(212_173_102/0.35)]",
+              i === 1 ? "animate-floaty-slow -translate-x-6" : i === 2 ? "animate-floaty [animation-delay:-4s]" : "animate-floaty",
             )}
           >
+            <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-300/40 to-transparent" />
             <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gold-300/15 bg-ink-850">
               {p.cover ? <Picture src={p.cover} alt="" sizes="44px" className="h-full w-full object-cover object-top" /> : null}
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ivory">
-                {p.title}
-                <span className="h-1.5 w-1.5 rounded-full bg-sage animate-pulse-dot" />
+                <span className="truncate">{shortTitle(p.title)}</span>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-sage animate-pulse-dot" />
               </span>
-              <span className="block truncate font-mono text-[10.5px] text-mist">{hostOf(p.liveUrl)}</span>
+              <span className="block truncate font-mono text-[10.5px] text-mist">{hostOf(p.liveUrl).replace(/^www\./, "")}</span>
             </span>
             <Icon name="arrow-up-right" className="h-4 w-4 text-gold-300 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </a>
         ))}
       </div>
-
       <button
         type="button"
         onClick={() => scrollToId("proof")}
-        className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-smoke transition hover:text-gold-200 md:flex"
+        className="absolute bottom-5 left-1/2 hidden -translate-x-1/2 flex-col items-center gap-2 text-smoke transition hover:text-gold-200 md:flex"
         aria-label="Scroll to content"
       >
         <span className="label text-[9.5px]">Scroll</span>
-        <span className="h-10 w-px bg-gradient-to-b from-gold-400 to-transparent" />
+        <span className="scroll-cue h-10 w-px bg-gradient-to-b from-gold-400/70 to-transparent" />
       </button>
     </section>
   );
@@ -398,9 +503,7 @@ function SelectedWork() {
 /* Why us — proof, code, comparison, guarantees                       */
 /* ------------------------------------------------------------------ */
 function WhyUs() {
-  const { collections, settings } = useContent();
-  const repos = collections.projects.filter((p) => p.repoUrl);
-  const github = settings.socials.find((s) => s.icon === "github")?.href;
+  const { collections } = useContent();
 
   return (
     <section className="relative py-28 md:py-36">
@@ -429,46 +532,6 @@ function WhyUs() {
             </Reveal>
           ))}
         </div>
-
-        {/* Inspect the code */}
-        <Reveal delay={80}>
-          <div className="lux-card mt-8 grid gap-10 overflow-hidden p-8 md:p-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-            <div>
-              <span className="eyebrow">Inspect before you hire</span>
-              <h3 className="display mt-6 text-[2.1rem] leading-tight md:text-[2.5rem]">
-                Our code is public. <span className="serif-accent text-gold">Read it before you sign.</span>
-              </h3>
-              <p className="mt-5 max-w-md text-[15px] leading-relaxed text-mist">
-                It's the most honest pitch a studio can make. Every product we showcase has an open repository — architecture, commits and all.
-              </p>
-              {github ? (
-                <Button href={github} variant="line" icon="github" className="mt-8" track="why_github">
-                  View GitHub profile
-                </Button>
-              ) : null}
-            </div>
-            <ul className="divide-y divide-gold-300/[0.08] rounded-2xl border border-gold-300/10 bg-ink-950/60">
-              {repos.map((p) => (
-                <li key={p.id}>
-                  <a
-                    href={p.repoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => track("cta_click", { label: `repo_list_${p.id}` })}
-                    className="group flex items-center gap-4 px-5 py-4 transition hover:bg-gold-300/[0.04]"
-                  >
-                    <Icon name="github" className="h-5 w-5 shrink-0 text-gold-300" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-mono text-[12.5px] text-parchment">{p.repoUrl?.replace(/^https?:\/\/(www\.)?github\.com\//, "")}</span>
-                      <span className="block truncate text-[12px] text-smoke">{p.stack.slice(0, 4).join(" · ")}</span>
-                    </span>
-                    <Icon name="arrow-up-right" className="h-4 w-4 shrink-0 text-smoke transition group-hover:text-gold-200" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </Reveal>
 
         <Reveal delay={100}>
           <div className="mt-20">

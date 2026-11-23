@@ -1036,6 +1036,76 @@
     -webkit-mask-image: radial-gradient(ellipse 60% 62% at 50% 50%, #000 55%, transparent 100%);
     mask-image: radial-gradient(ellipse 60% 62% at 50% 50%, #000 55%, transparent 100%);
   }
+  /* Instrument panel for the hero stats: echoes the armillary's watch-bezel ticks. */
+  .hero-instrument {
+    position: relative;
+    border: 1px solid rgba(227, 200, 140, 0.11);
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgba(227, 200, 140, 0.045), rgba(227, 200, 140, 0) 60%),
+      rgba(10, 9, 8, 0.72);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow:
+      inset 0 1px 0 rgba(246, 237, 216, 0.06),
+      0 30px 80px -40px rgba(0, 0, 0, 0.9);
+  }
+  .hero-instrument::before {
+    /* Bezel scale along the top edge: a minor tick every 12px, a major one every 96px. */
+    content: "";
+    position: absolute;
+    inset: 0 22px auto;
+    height: 7px;
+    background:
+      repeating-linear-gradient(90deg, rgba(227, 200, 140, 0.5) 0 1px, transparent 1px 96px),
+      repeating-linear-gradient(90deg, rgba(227, 200, 140, 0.2) 0 1px, transparent 1px 12px);
+    background-size:
+      100% 7px,
+      100% 4px;
+    background-repeat: no-repeat;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    pointer-events: none;
+  }
+  .hero-instrument::after {
+    /* Gold hairline that catches the light along the top edge. */
+    content: "";
+    position: absolute;
+    inset: -1px 18% auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(240, 214, 150, 0.7), transparent);
+    pointer-events: none;
+  }
+  .hero-corner {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: rgba(227, 200, 140, 0.45);
+    pointer-events: none;
+  }
+  .hero-meta {
+    border: 1px solid rgba(227, 200, 140, 0.1);
+    background: rgba(13, 12, 10, 0.5);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .scroll-cue {
+    position: relative;
+    overflow: hidden;
+  }
+  .scroll-cue::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 3px;
+    height: 3px;
+    margin-left: -1px;
+    border-radius: 999px;
+    background: #f2d697;
+    box-shadow: 0 0 8px 1px rgba(242, 214, 151, 0.8);
+    animation: scroll-cue 2.4s var(--ease) infinite;
+  }
 
   /* ---------- Accessibility ---------- */
   .skip-link {
@@ -1211,6 +1281,22 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+@keyframes scroll-cue {
+  0% {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(40px);
+    opacity: 0;
   }
 }
 @keyframes floaty {
@@ -1392,6 +1478,7 @@
 [data-offscreen] .animate-spin-slow,
 [data-offscreen] .animate-floaty,
 [data-offscreen] .animate-floaty-slow,
+[data-offscreen] .scroll-cue::after,
 .reveal:not(.reveal-in).gold-orbit::after,
 .reveal:not(.reveal-in) .gold-orbit::after,
 [data-offscreen] .gold-orbit::after,
@@ -1434,6 +1521,7 @@
   .marquee-track,
   .animate-floaty,
   .animate-floaty-slow,
+  .scroll-cue::after,
   .animate-spin-slow,
   .animate-pulse-dot::after,
   .page-enter,

@@ -113,6 +113,16 @@ function bakeEnvironmentOffThread(timeoutMs = 12000): Promise<DataTexture | null
   });
 }
 
+/**
+ * Starts the reflection bake as soon as this module loads on a "full" device, so it runs while the
+ * page is still settling instead of after the scene starts. createHeroScene() reuses the result.
+ */
+let envBake: Promise<DataTexture | null> | null = null;
+export function prewarmEnvironment() {
+  envBake ??= bakeEnvironmentOffThread();
+  return envBake;
+}
+
 /** Builds the scene inside `mount` and returns a cleanup function (safe to call at any time). */
 export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady, onFail }: Options): () => void {
   const lite = quality === "lite";
@@ -173,7 +183,8 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     // it from `three/src/...` instead would bundle a second copy of half the library.)
     const scene = new Scene();
     if (!lite) {
-      const baked = await bakeEnvironmentOffThread();
+      const baked = await prewarmEnvironment();
+      envBake = null; // the texture now belongs to this scene and is disposed with it
       if (disposed) {
         baked?.dispose();
         return;
@@ -407,19 +418,29 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       rim.position.set(-5, -2, -3);
       scene.add(rim);
     }
+    // A slow-travelling highlight that glides across the metals, like light catching a watch case.
+    const sweep = lite ? null : new PointLight(0xfff0d2, 18, 14, 2);
+    if (sweep) scene.add(sweep);
 
     /* ---------- Frame ---------- */
     const target = { x: 0, y: 0 };
     const current = { x: 0, y: 0 };
     let elapsed = 0;
+    let baseScale = 1;
     const frame = () => {
       const t = elapsed;
+      // Entrance: the instrument eases up to size and its rings unwind from a faster spin.
+      const k = reducedMotion ? 1 : Math.min(1, t / 2.2);
+      const intro = 1 - Math.pow(1 - k, 3);
+      root.scale.setScalar(baseScale * (0.84 + 0.16 * intro));
+      dustMat.opacity = 0.7 * intro;
+      if (sweep) sweep.position.set(Math.cos(t * 0.35) * 5, Math.sin(t * 0.22) * 3, 4.5);
       current.x += (target.x - current.x) * 0.04;
       current.y += (target.y - current.y) * 0.04;
       root.rotation.y = t * 0.06 + current.x * 0.5;
       root.rotation.x = Math.sin(t * 0.2) * 0.06 + current.y * 0.35;
       for (const r of rings) {
-        r.spinner.rotation.z = t * r.spec.spin;
+        r.spinner.rotation.z = t * r.spec.spin + (1 - intro) * r.spec.spin * 14;
         r.pivot.rotation.y = r.spec.tilt[1] + t * r.spec.precess;
       }
       bezel.rotation.y = -t * 0.035;
@@ -436,7 +457,7 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       gl.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      root.scale.setScalar(width < 640 ? 0.78 : 1);
+      baseScale = width < 640 ? 0.78 : 1;
     };
     applySize();
 

@@ -269,27 +269,53 @@ export default function Navbar() {
               onClick={() => window.dispatchEvent(new Event("wx:palette"))}
               aria-label="Search the site"
               title="Search (Ctrl + K)"
-              className="hidden items-center gap-2 rounded-full border border-gold-300/12 py-2 pr-2 pl-3 text-mist transition hover:border-gold-300/30 hover:text-ivory md:inline-flex"
+              className="hidden items-center gap-2.5 rounded-full border border-gold-300/20 bg-gold-300/[0.03] py-2.5 pr-2.5 pl-4 text-sand transition hover:border-gold-300/40 hover:text-ivory md:inline-flex xl:min-w-[190px]"
             >
-              <Icon name="search" className="h-3.5 w-3.5" />
-              <span className="kbd">⌘K</span>
+              <Icon name="search" className="h-4 w-4" />
+              <span className="hidden text-[13px] text-mist xl:inline">Search…</span>
+              <span className="kbd ml-auto">⌘K</span>
             </button>
 
-            <span
-              className="hidden items-center gap-2 rounded-full border border-gold-300/12 px-3.5 py-2 text-[12px] text-sand xl:inline-flex"
-              title={status.online ? `Online now · ${status.time} ${settings.timezoneLabel}` : `Away · ${status.time} ${settings.timezoneLabel}`}
-            >
-              <StatusDot online={status.online} />
-              {availabilityLabel(settings)}
-            </span>
-
-            <Link
-              to="/book"
-              onClick={() => track("cta_click", { label: "nav_book" })}
-              className="btn btn-gold btn-sm shine hidden sm:inline-flex"
-            >
-              Book a call
-            </Link>
+            {/* Availability lives on the CTA: a live dot badge, with the full status revealed on hover/focus. */}
+            <div className="group relative hidden sm:block">
+              <Link
+                to="/book"
+                onClick={() => track("cta_click", { label: "nav_book" })}
+                className="btn btn-gold btn-sm shine inline-flex"
+                aria-label={`Book a call. ${availabilityLabel(settings)}`}
+              >
+                Book a call
+              </Link>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "pointer-events-none absolute -top-1 -right-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-ink-950 ring-1 ring-gold-300/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute h-2 w-2 animate-ping rounded-full opacity-60",
+                    settings.availability.slotsOpen > 0 && status.online ? "bg-emerald-400" : "bg-amber-400",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "relative h-2 w-2 rounded-full",
+                    settings.availability.slotsOpen > 0 && status.online ? "bg-emerald-400" : "bg-amber-400",
+                  )}
+                />
+              </span>
+              <div
+                role="tooltip"
+                className="lux-panel pointer-events-none absolute top-full right-0 mt-3 w-max translate-y-1 rounded-2xl px-4 py-3 text-left opacity-0 transition duration-200 group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100"
+              >
+                <p className="label text-gold-300">{status.online ? "Online now" : "Away"}</p>
+                <p className="mt-1 text-[12.5px] font-semibold text-ivory">{availabilityLabel(settings)}</p>
+                <p className="mt-0.5 text-[11.5px] text-mist">
+                  {status.time} {settings.timezoneLabel}
+                </p>
+              </div>
+            </div>
 
             <button
               type="button"
