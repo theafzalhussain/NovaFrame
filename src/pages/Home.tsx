@@ -303,7 +303,12 @@ function ProofStrip() {
 
   return (
     <section id="proof" className="relative border-y border-gold-300/[0.08] bg-ink-950/70 py-10">
-      <p className="label mb-7 text-center">Live in production — open any of them</p>
+      <span aria-hidden className="pointer-events-none absolute inset-x-[12%] -top-px h-px bg-gradient-to-r from-transparent via-gold-300/45 to-transparent" />
+      <p className="label mb-7 flex items-center justify-center gap-3">
+        <span aria-hidden className="h-px w-8 bg-gradient-to-r from-transparent to-gold-400/60" />
+        Live in production — open any of them
+        <span aria-hidden className="h-px w-8 bg-gradient-to-l from-transparent to-gold-400/60" />
+      </p>
       <Marquee items={products} gap="gap-14" />
       <Marquee
         className="mt-6"
@@ -521,10 +526,10 @@ function WhyUs() {
         <div className="mt-16 grid gap-px overflow-hidden rounded-[26px] border border-gold-300/10 bg-gold-300/10 md:grid-cols-2 lg:grid-cols-3">
           {collections.whyUs.map((w, i) => (
             <Reveal key={w.id} delay={(i % 3) * 70} className="h-full">
-              <div className="group h-full bg-ink-950 p-8 transition-colors hover:bg-ink-900">
+              <div className="why-cell group h-full bg-ink-950 p-8 transition-colors duration-500 hover:bg-ink-900">
                 <div className="flex items-center justify-between">
-                  <IconTile name={w.icon} />
-                  <span className="font-mono text-[11px] text-smoke">{String(i + 1).padStart(2, "0")}</span>
+                  <IconTile name={w.icon} className="transition duration-500 group-hover:-translate-y-0.5" />
+                  <span className="font-mono text-[11px] text-smoke transition-colors duration-500 group-hover:text-gold-300">{String(i + 1).padStart(2, "0")}</span>
                 </div>
                 <h3 className="mt-7 text-[18px] font-semibold text-ivory">{w.title}</h3>
                 <p className="mt-2.5 text-[14.5px] leading-relaxed text-mist">{w.desc}</p>
@@ -543,7 +548,7 @@ function WhyUs() {
         <Reveal delay={120}>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {collections.guarantees.map((g) => (
-              <div key={g.id} className="lux-inset flex items-start gap-4 rounded-2xl p-5">
+              <div key={g.id} className="lux-inset flex items-start gap-4 rounded-2xl p-5 transition-colors duration-500 hover:border-gold-300/25 hover:bg-gold-300/[0.04]">
                 <IconTile name={g.icon} size="sm" />
                 <div>
                   <p className="text-[14.5px] font-semibold text-ivory">{g.title}</p>
@@ -578,12 +583,15 @@ function ProcessSection() {
         </Reveal>
 
         <div className="relative mt-20">
-          <div className="absolute top-[27px] right-[10%] left-[10%] hidden h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent lg:block" aria-hidden />
+          {/* The rail draws itself in once the steps reveal, then a glint of light runs along it. */}
+          <Reveal className="absolute top-[27px] right-[10%] left-[10%] hidden lg:block">
+            <div className="process-rail h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent" aria-hidden />
+          </Reveal>
           <ol className="grid gap-10 lg:gap-6" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(190px, 1fr))` }}>
             {steps.map((s, i) => (
-              <Reveal key={s.id} as="li" delay={i * 90} className="relative text-left lg:text-center">
+              <Reveal key={s.id} as="li" delay={i * 90} className="group relative text-left lg:text-center">
                 <div className="flex items-center gap-4 lg:flex-col lg:gap-0">
-                  <span className="relative z-[1] grid h-14 w-14 shrink-0 place-items-center rounded-full border border-gold-300/40 bg-ink-950 font-display text-[1.15rem] text-gold-200 shadow-[0_0_0_6px_rgba(8,7,6,1)]">
+                  <span className="relative z-[1] grid h-14 w-14 shrink-0 place-items-center rounded-full border border-gold-300/40 bg-ink-950 bg-[radial-gradient(circle_at_35%_30%,rgb(227_200_140/0.14),transparent_70%)] font-display text-[1.15rem] text-gold-200 shadow-[0_0_0_6px_rgba(8,7,6,1)] transition duration-500 group-hover:border-gold-200/80 group-hover:text-ivory group-hover:shadow-[0_0_0_6px_rgba(8,7,6,1),0_0_30px_rgba(212,173,102,0.45)]">
                     {s.step}
                   </span>
                   <span className="chip lg:mt-6">{s.duration}</span>
@@ -598,8 +606,8 @@ function ProcessSection() {
         <Reveal delay={120}>
           <div className="mt-20 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {collections.rhythm.map((r) => (
-              <div key={r.id} className="lux-card p-6">
-                <Icon name={r.icon} className="h-5 w-5 text-gold-300" />
+              <div key={r.id} className="lux-card lux-hover group p-6">
+                <Icon name={r.icon} className="h-5 w-5 text-gold-300 transition duration-500 group-hover:-translate-y-0.5 group-hover:text-gold-200" />
                 <p className="mt-4 text-[15px] font-semibold text-ivory">{r.title}</p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-mist">{r.desc}</p>
               </div>

@@ -39,6 +39,11 @@ function StaticArmillary() {
           <stop offset="0" stopColor="#e8c88c" stopOpacity="0.32" />
           <stop offset="1" stopColor="#d4ad66" stopOpacity="0" />
         </radialGradient>
+        <radialGradient id="hc-atmo" cx="50%" cy="50%" r="50%">
+          <stop offset="0.78" stopColor="#e8c88c" stopOpacity="0" />
+          <stop offset="0.82" stopColor="#e8c88c" stopOpacity="0.34" />
+          <stop offset="1" stopColor="#e8c88c" stopOpacity="0" />
+        </radialGradient>
         <linearGradient id="hc-gold" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#f2d697" />
           <stop offset="0.5" stopColor="#c99a52" />
@@ -53,6 +58,7 @@ function StaticArmillary() {
           </ellipse>
         </g>
       ))}
+      <circle cx="200" cy="200" r="86" fill="url(#hc-atmo)" />
       <circle cx="200" cy="200" r="68" fill="url(#hc-core)" stroke="rgba(227,200,140,0.4)" strokeWidth="1" />
       <ellipse cx="180" cy="172" rx="16" ry="9" fill="#fff" opacity="0.16" transform="rotate(-30 180 172)" />
     </svg>

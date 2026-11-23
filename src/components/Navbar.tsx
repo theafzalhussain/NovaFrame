@@ -17,6 +17,9 @@ export default function Navbar() {
   const status = useStudioStatus();
   const [scrolled, setScrolled] = useState(false);
   const progressRef = useRef<HTMLDivElement | null>(null);
+  const capsuleProgressRef = useRef<HTMLSpanElement | null>(null);
+  const linksRef = useRef<HTMLDivElement | null>(null);
+  const hoverRef = useRef<HTMLSpanElement | null>(null);
   const megaWrapRef = useRef<HTMLDivElement | null>(null);
   const megaPanelRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -43,6 +46,7 @@ export default function Navbar() {
       const max = document.documentElement.scrollHeight - window.innerHeight;
       const p = max > 0 ? Math.min(y / max, 1) : 0;
       if (progressRef.current) progressRef.current.style.transform = `scaleX(${p})`;
+      if (capsuleProgressRef.current) capsuleProgressRef.current.style.transform = `scaleX(${p})`;
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(update);
@@ -108,6 +112,36 @@ export default function Navbar() {
     }
   };
 
+  // A soft gold pill glides behind whichever link the mouse is over. Written straight to the DOM.
+  const moveHover = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
+    const wrap = linksRef.current;
+    const pill = hoverRef.current;
+    const item = (e.target as HTMLElement).closest<HTMLElement>("[data-navlink]");
+    if (!wrap || !pill) return;
+    if (!item || !wrap.contains(item)) {
+      pill.style.opacity = "0";
+      return;
+    }
+    const w = wrap.getBoundingClientRect();
+    const r = item.getBoundingClientRect();
+    const first = pill.style.opacity !== "1";
+    if (first) pill.style.transition = "opacity 0.3s ease"; // appear in place, then glide
+    pill.style.width = `${r.width}px`;
+    pill.style.transform = `translateX(${r.left - w.left}px)`;
+    pill.style.opacity = "1";
+    if (first) {
+      void pill.offsetWidth; // commit the new position before the glide transition comes back
+      pill.style.transition = "";
+    }
+  };
+  const hideHover = () => {
+    if (hoverRef.current) hoverRef.current.style.opacity = "0";
+  };
+
+  const solid = scrolled || open;
+  const capsule = scrolled && !open;
+
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       {/* Announcement */}
@@ -140,20 +174,16 @@ export default function Navbar() {
         </div>
       </div>
 
-      <div
-        className={cn(
-          "relative z-[2] border-b transition-[background-color,border-color] duration-500",
-          // Frosted glass only with a mouse: backdrop blur is re-computed on every scrolled frame,
-          // which phones can't afford. Touch screens get a near-opaque bar instead.
-          scrolled || open
-            ? "border-gold-300/10 bg-ink-950/95 pointer-fine:bg-ink-950/80 pointer-fine:backdrop-blur-xl"
-            : "border-transparent bg-transparent",
-        )}
-      >
-        <nav className="shell flex h-[76px] items-center justify-between gap-4" aria-label="Primary">
+      <div data-solid={solid} data-capsule={capsule} className="nav-bar relative z-[2]">
+        <nav className="shell relative flex h-[76px] items-center justify-between gap-4" aria-label="Primary">
+          {/* Desktop: once scrolled, the bar becomes a floating glass capsule with its own progress line. */}
+          <span aria-hidden className="nav-capsule">
+            <span ref={capsuleProgressRef} className="nav-capsule-progress" style={{ transform: "scaleX(0)" }} />
+          </span>
           <Logo />
 
-          <div className="hidden items-center gap-1 lg:flex">
+          <div ref={linksRef} onPointerMove={moveHover} onPointerLeave={hideHover} className="relative hidden items-center gap-1 lg:flex">
+            <span ref={hoverRef} aria-hidden className="nav-hover" />
             {/* Services menu: opens on mouse hover or click. Touch only toggles on tap — a touch
                 "hover" followed by the click used to open and immediately close it again. */}
             <div
@@ -167,6 +197,7 @@ export default function Navbar() {
             >
               <button
                 type="button"
+                data-navlink
                 aria-expanded={mega}
                 aria-haspopup="true"
                 onClick={(e) => {
@@ -191,15 +222,16 @@ export default function Navbar() {
                   mega ? "visible translate-y-0 opacity-100" : "invisible -translate-y-2 opacity-0",
                 )}
               >
-                <div className="lux-panel grid grid-cols-[1fr_250px] overflow-hidden rounded-[24px]">
+                <div className="lux-panel relative grid grid-cols-[1fr_250px] overflow-hidden rounded-[24px]">
+                  <span aria-hidden className="pointer-events-none absolute inset-x-[12%] top-0 h-px bg-gradient-to-r from-transparent via-gold-300/60 to-transparent" />
                   <div className="grid grid-cols-2 gap-1 p-3">
                     {services.map((s) => (
                       <Link
                         key={s.id}
                         to={`/services/${s.id}`}
-                        className="group flex items-start gap-3.5 rounded-2xl p-3.5 transition-colors hover:bg-gold-300/[0.06]"
+                        className="group relative flex items-start gap-3.5 rounded-2xl border border-transparent p-3.5 transition-colors hover:border-gold-300/10 hover:bg-gold-300/[0.06]"
                       >
-                        <span className="icon-tile mt-0.5 h-10 w-10 rounded-xl">
+                        <span className="icon-tile mt-0.5 h-10 w-10 rounded-xl transition duration-500 group-hover:-translate-y-0.5 group-hover:border-gold-300/50 group-hover:shadow-[0_8px_22px_-10px_rgba(212,173,102,0.7)]">
                           <Icon name={s.icon} className="h-[18px] w-[18px]" />
                         </span>
                         <span className="min-w-0">
@@ -213,8 +245,9 @@ export default function Navbar() {
                       </Link>
                     ))}
                   </div>
-                  <div className="relative flex flex-col justify-between border-l border-gold-300/10 bg-gradient-to-b from-gold-400/[0.08] to-transparent p-6">
-                    <div>
+                  <div className="relative flex flex-col justify-between overflow-hidden border-l border-gold-300/10 bg-gradient-to-b from-gold-400/[0.08] to-transparent p-6">
+                    <span aria-hidden className="dot-grid pointer-events-none absolute inset-0 opacity-25 [mask-image:linear-gradient(180deg,#000,transparent_70%)]" />
+                    <div className="relative">
                       <p className="label text-gold-300">Free consultation</p>
                       <p className="display mt-3 text-[1.4rem] leading-tight">
                         30 minutes with the <span className="serif-accent text-gold">founder.</span>
@@ -235,6 +268,7 @@ export default function Navbar() {
                 <Link
                   key={link.to}
                   to={link.to}
+                  data-navlink
                   className={cn(
                     "relative rounded-full px-4 py-2 text-[13.5px] font-semibold tracking-[0.01em] transition-colors",
                     isActivePath(path, link.to) ? "text-gold-200" : "text-sand hover:text-ivory",
@@ -242,7 +276,7 @@ export default function Navbar() {
                 >
                   {link.label}
                   {isActivePath(path, link.to) ? (
-                    <span className="absolute inset-x-4 -bottom-0.5 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent" />
+                    <span className="absolute inset-x-4 -bottom-0.5 h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent shadow-[0_0_8px_rgba(227,200,140,0.7)]" />
                   ) : null}
                 </Link>
               ))}
@@ -333,7 +367,7 @@ export default function Navbar() {
           </div>
         </nav>
 
-        <div className="pointer-events-none absolute inset-x-0 -bottom-px h-px">
+        <div className="nav-progress pointer-events-none absolute inset-x-0 -bottom-px h-px">
           <div
             ref={progressRef}
             className="h-full w-full origin-left bg-gradient-to-r from-gold-700 via-gold-300 to-gold-500"
@@ -345,7 +379,7 @@ export default function Navbar() {
       {/* Mobile menu (sits under the bar; the bar stays on top so its close button is always tappable) */}
       <div
         className={cn(
-          "fixed inset-x-0 top-[76px] bottom-0 z-[1] overflow-y-auto overscroll-contain bg-ink-950 transition-[opacity,visibility] duration-500 lg:hidden",
+          "fixed inset-x-0 top-[76px] bottom-0 z-[1] overflow-y-auto overscroll-contain bg-ink-950 bg-[radial-gradient(ellipse_90%_45%_at_85%_0%,rgb(212_173_102/0.12),transparent_70%)] transition-[opacity,visibility] duration-500 lg:hidden",
           open ? "visible opacity-100" : "invisible opacity-0",
         )}
       >

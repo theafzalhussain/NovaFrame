@@ -1,8 +1,8 @@
 /**
  * "The Armillary" — a real-time WebGL centrepiece.
- * Polished obsidian core with engraved meridians, precessing gold rings
- * with orbiting beads, a watch-bezel tick ring, a soft halo and drifting
- * gold dust. Pauses off-screen, respects reduced motion, cleans up fully.
+ * Polished obsidian core with engraved meridians and a gold atmosphere, precessing gold rings
+ * whose beads trail streaks of light, signal pulses that travel out to a watch-bezel tick ring,
+ * a soft halo and twinkling gold dust. Pauses off-screen, respects reduced motion, cleans up fully.
  *
  * Loaded on demand by <HeroCanvas>, so three.js stays out of the main bundle.
  *  - "full": desktops/laptops and large tablets — physically based metals, the original look.
@@ -20,6 +20,7 @@
 import {
   ACESFilmicToneMapping,
   AdditiveBlending,
+  BackSide,
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
@@ -27,6 +28,7 @@ import {
   CubeUVReflectionMapping,
   DataTexture,
   DirectionalLight,
+  DoubleSide,
   Group,
   HalfFloatType,
   InstancedMesh,
@@ -36,6 +38,7 @@ import {
   LinearSRGBColorSpace,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshMatcapMaterial,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
@@ -43,11 +46,12 @@ import {
   PerspectiveCamera,
   PointLight,
   Points,
-  PointsMaterial,
   Quaternion,
   RGBAFormat,
+  RingGeometry,
   SRGBColorSpace,
   Scene,
+  ShaderMaterial,
   SphereGeometry,
   Sprite,
   SpriteMaterial,
@@ -281,9 +285,9 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
         : new MeshPhysicalMaterial({
             color: 0x0c0b0a,
             metalness: 0.25,
-            roughness: 0.14,
+            roughness: 0.18,
             clearcoat: 1,
-            clearcoatRoughness: 0.06,
+            clearcoatRoughness: 0.1,
             envMapIntensity: 1.1,
           }),
     );
@@ -299,6 +303,56 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     // Obsidian core + engraved meridians
     const coreSegments = lite ? 40 : 64;
     root.add(new Mesh(track(new SphereGeometry(1.08, coreSegments, coreSegments)), obsidian));
+
+    // Gold atmosphere: a back-face fresnel shell that glows at the core's silhouette and fades
+    // outward, plus a fine rim of light on the core itself. Plain additive shaders, no textures.
+    const fresnelVertex = /* glsl */ `
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`;
+    const atmosphereMat = track(
+      new ShaderMaterial({
+        uniforms: { uIntensity: { value: 0 } },
+        vertexShader: fresnelVertex,
+        fragmentShader: /* glsl */ `
+          uniform float uIntensity;
+          varying vec3 vN;
+          varying vec3 vV;
+          void main() {
+            float f = pow(clamp(-dot(normalize(vN), normalize(vV)), 0.0, 1.0), 2.2);
+            gl_FragColor = vec4(0.93, 0.78, 0.5, f * uIntensity);
+          }`,
+        side: BackSide,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+      }),
+    );
+    const atmosphere = new Mesh(track(new SphereGeometry(1.46, 48, 48)), atmosphereMat);
+    root.add(atmosphere);
+    const rimMat = track(
+      new ShaderMaterial({
+        uniforms: { uIntensity: { value: 0 } },
+        vertexShader: fresnelVertex,
+        fragmentShader: /* glsl */ `
+          uniform float uIntensity;
+          varying vec3 vN;
+          varying vec3 vV;
+          void main() {
+            float f = pow(1.0 - clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0), 3.2);
+            gl_FragColor = vec4(1.0, 0.86, 0.6, f * uIntensity);
+          }`,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+      }),
+    );
+    root.add(new Mesh(track(new SphereGeometry(1.086, coreSegments, coreSegments)), rimMat));
 
     const engraved = new Group();
     const circlePoints = (radius: number, segments = lite ? 80 : 128) => {
@@ -321,6 +375,10 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       line.rotation.y = (i / 6) * Math.PI;
       engraved.add(line);
     }
+    // A fine gold band at the equator, like the girdle of a cut stone.
+    const girdle = new Mesh(track(new TorusGeometry(1.1, 0.008, 6, lite ? 96 : 160)), gold);
+    girdle.rotation.x = Math.PI / 2;
+    engraved.add(girdle);
     root.add(engraved);
 
     // Halo sprite behind the core
@@ -335,17 +393,37 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       hctx.fillStyle = g;
       hctx.fillRect(0, 0, 256, 256);
     }
-    const haloMat = track(
-      new SpriteMaterial({ map: track(new CanvasTexture(haloCanvas)), blending: AdditiveBlending, depthWrite: false, transparent: true }),
-    );
+    const haloTex = track(new CanvasTexture(haloCanvas));
+    const haloMat = track(new SpriteMaterial({ map: haloTex, blending: AdditiveBlending, depthWrite: false, transparent: true }));
     const halo = new Sprite(haloMat);
     halo.scale.setScalar(5.6);
     halo.position.z = -1.2;
     root.add(halo);
 
-    // Precessing rings with orbiting beads
+    // Precessing rings with orbiting beads. Each bead glows and drags a fading streak of light
+    // along its ring, like a comet riding the orbit.
     const beadSegments = lite ? 10 : 16;
     const beadGeo = track(new SphereGeometry(0.075, beadSegments, beadSegments));
+    const beadGlowMat = track(
+      new SpriteMaterial({ map: haloTex, blending: AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.95, toneMapped: false }),
+    );
+    const TRAIL_ARC = 1.2;
+    const trailMat = track(new MeshBasicMaterial({ vertexColors: true, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+    /** A partial torus whose vertex colours fade from bright gold at the head to nothing at the tail. */
+    const trailGeometry = (radius: number, tube: number, headAtEnd: boolean) => {
+      const geo = track(new TorusGeometry(radius, tube, 6, lite ? 48 : 72, TRAIL_ARC));
+      const pos = geo.getAttribute("position");
+      const colors = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const u = Math.min(1, Math.max(0, Math.atan2(pos.getY(i), pos.getX(i)) / TRAIL_ARC));
+        const k = Math.pow(headAtEnd ? u : 1 - u, 2.4);
+        colors[i * 3] = k;
+        colors[i * 3 + 1] = 0.8 * k;
+        colors[i * 3 + 2] = 0.48 * k;
+      }
+      geo.setAttribute("color", new BufferAttribute(colors, 3));
+      return geo;
+    };
     const ringSpecs = [
       { r: 2.05, tube: 0.024, tilt: [Math.PI / 2, 0, 0], spin: 0.22, precess: 0.05, beads: 1 },
       { r: 2.32, tube: 0.018, tilt: [0.45, 0.7, 0], spin: -0.16, precess: -0.07, beads: 2 },
@@ -357,11 +435,21 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       const spinner = new Group();
       const ringGeo = track(new TorusGeometry(spec.r, spec.tube, lite ? 8 : 12, lite ? 120 : 180));
       spinner.add(new Mesh(ringGeo, i === 1 ? goldSoft : gold));
+      // Positive spin turns the ring anticlockwise, so the streak trails at smaller angles.
+      const forward = spec.spin > 0;
+      const trailGeo = trailGeometry(spec.r, spec.tube * 1.7, forward);
       for (let b = 0; b < spec.beads; b++) {
         const bead = new Mesh(beadGeo, gold);
         const a = (b / spec.beads) * Math.PI * 2 + i;
         bead.position.set(Math.cos(a) * spec.r, Math.sin(a) * spec.r, 0);
         spinner.add(bead);
+        const glow = new Sprite(beadGlowMat);
+        glow.position.copy(bead.position);
+        glow.scale.setScalar(0.7);
+        spinner.add(glow);
+        const trail = new Mesh(trailGeo, trailMat);
+        trail.rotation.z = forward ? a - TRAIL_ARC : a;
+        spinner.add(trail);
       }
       pivot.add(spinner);
       root.add(pivot);
@@ -390,9 +478,37 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
     bezel.rotation.x = 0.28;
     root.add(bezel);
 
-    // Gold dust
+    // Signal pulses: thin gold rings that leave the core and travel out to the bezel, one every few
+    // seconds, as if the instrument were broadcasting. Drawn in the bezel's plane.
+    const PULSE_PERIOD = 7;
+    const PULSE_FROM = 1.15;
+    const PULSE_TO = 3.0;
+    const pulseGeo = track(new RingGeometry(0.972, 1, lite ? 96 : 160));
+    const pulses = [0, 0.5].map((offset) => {
+      const mat = track(
+        new MeshBasicMaterial({
+          color: 0xe8c88c,
+          transparent: true,
+          opacity: 0,
+          blending: AdditiveBlending,
+          depthWrite: false,
+          side: DoubleSide,
+          toneMapped: false,
+        }),
+      );
+      const mesh = new Mesh(pulseGeo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.visible = false;
+      bezel.add(mesh);
+      return { mesh, mat, offset };
+    });
+
+    // Gold dust: soft round motes that twinkle on their own rhythm, with a few large out-of-focus
+    // ones for depth. One draw call; the twinkle runs in the vertex shader.
     const DUST = lite ? 160 : window.innerWidth < 768 ? 220 : 420;
     const dustPositions = new Float32Array(DUST * 3);
+    const dustPhase = new Float32Array(DUST);
+    const dustSize = new Float32Array(DUST);
     for (let i = 0; i < DUST; i++) {
       const r = 3.2 + Math.random() * 4.2;
       const theta = Math.random() * Math.PI * 2;
@@ -400,11 +516,40 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       dustPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       dustPositions[i * 3 + 1] = r * Math.cos(phi) * 0.7;
       dustPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta) - 1;
+      dustPhase[i] = Math.random();
+      dustSize[i] = Math.random() < 0.07 ? 0.18 + Math.random() * 0.16 : 0.04 + Math.random() * 0.06;
     }
     const dustGeo = track(new BufferGeometry());
     dustGeo.setAttribute("position", new BufferAttribute(dustPositions, 3));
+    dustGeo.setAttribute("aPhase", new BufferAttribute(dustPhase, 1));
+    dustGeo.setAttribute("aSize", new BufferAttribute(dustSize, 1));
     const dustMat = track(
-      new PointsMaterial({ color: 0xe3c88c, size: 0.03, transparent: true, opacity: 0.7, depthWrite: false, blending: AdditiveBlending }),
+      new ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uScale: { value: 400 }, uOpacity: { value: 0 } },
+        vertexShader: /* glsl */ `
+          uniform float uTime;
+          uniform float uScale;
+          attribute float aPhase;
+          attribute float aSize;
+          varying float vAlpha;
+          void main() {
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            gl_Position = projectionMatrix * mv;
+            float twinkle = 0.5 + 0.5 * sin(uTime * (0.6 + aPhase * 1.2) + aPhase * 6.2831);
+            vAlpha = (0.35 + 0.65 * twinkle) * (aSize > 0.15 ? 0.22 : 1.0);
+            gl_PointSize = min(aSize * uScale / -mv.z, 48.0);
+          }`,
+        fragmentShader: /* glsl */ `
+          uniform float uOpacity;
+          varying float vAlpha;
+          void main() {
+            float a = 1.0 - smoothstep(0.0, 0.5, length(gl_PointCoord - 0.5));
+            gl_FragColor = vec4(0.94, 0.8, 0.56, a * a * vAlpha * uOpacity);
+          }`,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+      }),
     );
     const dust = new Points(dustGeo, dustMat);
     scene.add(dust);
@@ -433,16 +578,39 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       const k = reducedMotion ? 1 : Math.min(1, t / 2.2);
       const intro = 1 - Math.pow(1 - k, 3);
       root.scale.setScalar(baseScale * (0.84 + 0.16 * intro));
-      dustMat.opacity = 0.7 * intro;
+      dustMat.uniforms.uOpacity.value = intro;
+      dustMat.uniforms.uTime.value = t;
       if (sweep) sweep.position.set(Math.cos(t * 0.35) * 5, Math.sin(t * 0.22) * 3, 4.5);
       current.x += (target.x - current.x) * 0.04;
       current.y += (target.y - current.y) * 0.04;
+      // A touch of camera parallax so the dust and the instrument separate in depth as the mouse moves.
+      camera.position.set(current.x * 0.9, -current.y * 0.55, 10);
+      camera.lookAt(0, 0, 0);
       root.rotation.y = t * 0.06 + current.x * 0.5;
       root.rotation.x = Math.sin(t * 0.2) * 0.06 + current.y * 0.35;
       for (const r of rings) {
         r.spinner.rotation.z = t * r.spec.spin + (1 - intro) * r.spec.spin * 14;
         r.pivot.rotation.y = r.spec.tilt[1] + t * r.spec.precess;
       }
+      // Pulses start once the entrance has settled; the core's rim flares as each one leaves.
+      let flare = 0;
+      for (const pl of pulses) {
+        const local = t - 2.4 - pl.offset * PULSE_PERIOD;
+        if (reducedMotion || local < 0) {
+          pl.mesh.visible = false;
+          continue;
+        }
+        const ph = (local % PULSE_PERIOD) / PULSE_PERIOD;
+        const eased = 1 - Math.pow(1 - ph, 2.2);
+        pl.mesh.visible = true;
+        pl.mesh.scale.setScalar(PULSE_FROM + (PULSE_TO - PULSE_FROM) * eased);
+        pl.mat.opacity = 0.85 * Math.pow(1 - ph, 1.4) * Math.min(1, ph * 12);
+        flare = Math.max(flare, Math.pow(Math.max(0, 1 - ph * 5), 2));
+      }
+      const breathe = 0.9 + Math.sin(t * 1.2) * 0.1;
+      atmosphereMat.uniforms.uIntensity.value = 1.25 * intro * breathe + flare * 0.5;
+      rimMat.uniforms.uIntensity.value = (0.7 + flare * 0.6) * intro;
+      beadGlowMat.opacity = 0.95 * intro;
       bezel.rotation.y = -t * 0.035;
       engraved.rotation.y = t * 0.08;
       halo.material.opacity = 0.85 + Math.sin(t * 1.2) * 0.15;
@@ -458,6 +626,8 @@ export function createHeroScene(mount: HTMLElement, { quality, reduced, onReady,
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       baseScale = width < 640 ? 0.78 : 1;
+      // Dust sizes are in world units; this converts them to pixels at the current resolution.
+      dustMat.uniforms.uScale.value = height * gl.getPixelRatio() * 0.5;
     };
     applySize();
 
